@@ -20,5 +20,6 @@ composition sync runs automatically without blocking the agent.
 - [x] Test input minimization, detachment, hook contract, and failure behavior.
 - [x] Run `claude plugin validate`.
 - [x] Exercise real `Stop` and `SessionEnd` events with a fake Stacktrace sink.
-- [ ] Push a ready PR. The plugin requires the unreleased `remote auto-sync`
+- [x] Push ready [PR #1](https://github.com/stacktrace-ai/stacktrace-claude-plugin/pull/1).
+      The plugin requires the unreleased `remote auto-sync`
       CLI surface until the Stacktrace change ships in an immutable package.
