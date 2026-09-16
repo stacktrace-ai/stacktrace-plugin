@@ -1,0 +1,27 @@
+{
+  "description": "Synchronize changed Stacktrace runtime state without blocking Claude Code.",
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/scripts/launch_auto_sync.py",
+            "async": true
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/scripts/launch_auto_sync.py",
+            "async": true
+          }
+        ]
+      }
+    ]
+  }
+}

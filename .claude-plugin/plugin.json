@@ -1,0 +1,17 @@
+{
+  "name": "stacktrace",
+  "description": "Runtime detection and automatic Cloud sync for Claude Code sessions.",
+  "author": {
+    "name": "Stacktrace AI",
+    "url": "https://stacktrace.ai"
+  },
+  "homepage": "https://stacktrace.ai",
+  "repository": "https://github.com/stacktrace-ai/stacktrace-claude-plugin",
+  "keywords": [
+    "agent-security",
+    "runtime-detection",
+    "claude-code",
+    "mcp",
+    "stacktrace"
+  ]
+}
