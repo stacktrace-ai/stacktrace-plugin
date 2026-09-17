@@ -23,10 +23,22 @@ bash scripts/install-hooks.sh
   upload.
 - Hook launchers may forward only `session_id`, `transcript_path`, `cwd`, and
   `hook_event_name`. Never persist or forward prompt, response, or tool content.
-- Hooks must remain asynchronous and non-blocking.
+- Sync work must remain asynchronous and non-blocking. The one synchronous hook
+  is the finding renderer (ADR-0002): it may only query the CLI, is capped at
+  two seconds, and must print nothing when anything is missing or malformed.
 - Sync state and logs belong under Stacktrace's own state directory; the plugin
-  owns no cursor or retry state.
+  owns no cursor or retry state. It also owns no notification state: delivery,
+  firing counts, dismissals, and mutes are the CLI's, and reach the plugin only
+  as fields in a response.
 - Keep the plugin thin. Product logic belongs in `stacktrace-cli`.
+
+## Presentation
+
+- The plugin renders findings; it never decides that one exists.
+- Severity and confidence are orthogonal and are always labelled as such.
+- Colour is never the only carrier of meaning: honour `NO_COLOR`, keep the words.
+- Partial coverage is stated on the finding. What a detector could not see is
+  part of its claim, not a caveat to bury.
 
 ## Repo conventions
 

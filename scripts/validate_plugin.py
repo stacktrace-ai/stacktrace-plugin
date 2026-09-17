@@ -48,7 +48,7 @@ def main() -> int:
     if len(plugins) != 1 or plugins[0] != {"name": "stacktrace", "source": "./"}:
         fail("marketplace must list exactly the repository-local stacktrace plugin")
 
-    expected_skills = {"setup", "status", "detect"}
+    expected_skills = {"setup", "status", "detect", "dismiss", "mute", "why"}
     skills_root = ROOT / "skills"
     observed_skills = {
         path.name
@@ -63,23 +63,34 @@ def main() -> int:
     configured = hooks.get("hooks")
     if not isinstance(configured, dict) or set(configured) != {"Stop", "SessionEnd"}:
         fail("hooks must contain exactly Stop and SessionEnd")
-    expected_command = '"${CLAUDE_PLUGIN_ROOT}"/scripts/launch_auto_sync.py'
+    sync_launcher = {
+        "type": "command",
+        "command": '"${CLAUDE_PLUGIN_ROOT}"/scripts/launch_auto_sync.py',
+        "async": True,
+    }
+    # ADR-0002: Stop also renders, and rendering has to be synchronous because
+    # Claude Code never reads an async hook's stdout. SessionEnd stays
+    # metadata-only -- there is nobody left to read a finding there.
+    renderer = {
+        "type": "command",
+        "command": '"${CLAUDE_PLUGIN_ROOT}"/scripts/render_finding.py',
+        "timeout": 5,
+    }
+    expected_handlers = {"Stop": [sync_launcher, renderer], "SessionEnd": [sync_launcher]}
+
     for event, matchers in configured.items():
         if not isinstance(matchers, list) or len(matchers) != 1:
             fail(f"{event} must contain one matcher group")
         matcher = matchers[0]
         if not isinstance(matcher, dict):
             fail(f"{event} matcher group must be an object")
-        handlers = matcher.get("hooks")
-        if not isinstance(handlers, list) or len(handlers) != 1:
-            fail(f"{event} must contain one handler")
-        handler = handlers[0]
-        if handler != {"type": "command", "command": expected_command, "async": True}:
-            fail(f"{event} must invoke only the async metadata launcher")
+        if matcher.get("hooks") != expected_handlers[event]:
+            fail(f"{event} must invoke exactly its documented handlers, in order")
 
-    launcher = ROOT / "scripts" / "launch_auto_sync.py"
-    if not launcher.is_file() or not launcher.stat().st_mode & stat.S_IXUSR:
-        fail("scripts/launch_auto_sync.py must exist and be executable")
+    for name in ("launch_auto_sync.py", "render_finding.py"):
+        script = ROOT / "scripts" / name
+        if not script.is_file() or not script.stat().st_mode & stat.S_IXUSR:
+            fail(f"scripts/{name} must exist and be executable")
 
     forbidden = [ROOT / ".mcp.json", ROOT / "settings.json", ROOT / "bin"]
     present = [path.name for path in forbidden if path.exists()]

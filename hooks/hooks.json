@@ -1,5 +1,5 @@
 {
-  "description": "Synchronize changed Stacktrace runtime state without blocking Claude Code.",
+  "description": "Synchronize changed Stacktrace runtime state without blocking Claude Code, and render findings the CLI has already decided to surface.",
   "hooks": {
     "Stop": [
       {
@@ -8,6 +8,11 @@
             "type": "command",
             "command": "\"${CLAUDE_PLUGIN_ROOT}\"/scripts/launch_auto_sync.py",
             "async": true
+          },
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/scripts/render_finding.py",
+            "timeout": 5
           }
         ]
       }
