@@ -11,7 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 import detect_and_notify as detector  # noqa: E402
 
 
-def transcript(*entries: tuple[str, str, bool]) -> Path:
+def transcript(*entries: tuple[str, str, bool], command: str = "pytest") -> Path:
     """Write a transcript whose tool calls are (id, tool, failed) in order."""
     lines: list[str] = []
     for call_id, tool, _failed in entries:
@@ -19,7 +19,16 @@ def transcript(*entries: tuple[str, str, bool]) -> Path:
             json.dumps(
                 {
                     "type": "assistant",
-                    "message": {"content": [{"type": "tool_use", "id": call_id, "name": tool, "input": {}}]},
+                    "message": {
+                        "content": [
+                            {
+                                "type": "tool_use",
+                                "id": call_id,
+                                "name": tool,
+                                "input": {"command": command},
+                            }
+                        ]
+                    },
                 }
             )
         )
@@ -49,13 +58,23 @@ def transcript(*entries: tuple[str, str, bool]) -> Path:
 
 class SignatureTests(unittest.TestCase):
     def test_volatile_detail_does_not_split_one_streak(self) -> None:
-        first = detector.signature("Bash", "failed after 1.2s at /tmp/run-8471/test.py")
-        second = detector.signature("Bash", "failed after 9.8s at /tmp/run-2290/test.py")
+        call = {"command": "pytest"}
+        first = detector.signature("Bash", call, "failed after 1.2s at /tmp/run-8471/test.py")
+        second = detector.signature("Bash", call, "failed after 9.8s at /tmp/run-2290/test.py")
 
         self.assertEqual(first, second)
 
     def test_different_tools_are_different_failures(self) -> None:
-        self.assertNotEqual(detector.signature("Bash", "boom"), detector.signature("Edit", "boom"))
+        self.assertNotEqual(
+            detector.signature("Bash", {}, "boom"), detector.signature("Edit", {}, "boom")
+        )
+
+    def test_different_commands_sharing_an_error_are_not_one_streak(self) -> None:
+        """`Exit code 1` opens every failed Bash result; the call must disambiguate."""
+        self.assertNotEqual(
+            detector.signature("Bash", {"command": "pytest"}, "Exit code 1"),
+            detector.signature("Bash", {"command": "npm run build"}, "Exit code 1"),
+        )
 
 
 class StreakTests(unittest.TestCase):

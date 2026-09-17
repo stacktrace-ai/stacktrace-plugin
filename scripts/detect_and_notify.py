@@ -47,13 +47,24 @@ def use_colour(environ: dict[str, str]) -> bool:
     return environ.get("NO_COLOR") is None
 
 
-def signature(tool_name: str, content: object) -> str:
-    """A stable identity for one failure, robust to timestamps, paths and counters."""
-    text = content if isinstance(content, str) else json.dumps(content, sort_keys=True)
-    first = text.strip().splitlines()[0] if text.strip() else ""
+def _normalise(value: object, limit: int) -> str:
+    text = value if isinstance(value, str) else json.dumps(value, sort_keys=True)
     for pattern, replacement in _NOISE:
-        first = pattern.sub(replacement, first)
-    return f"{tool_name}:{first.strip().lower()[:160]}"
+        text = pattern.sub(replacement, text)
+    return text.strip().lower()[:limit]
+
+
+def signature(tool_name: str, call_input: object, content: object) -> str:
+    """Identity of one failing *call*, not of one error string.
+
+    The call has to be in the key. A failed Bash result opens with `Exit code 1`,
+    so an error-only signature makes every failing command in a session look like
+    the same failure -- three unrelated ones would report as a stall.
+    """
+    text = content if isinstance(content, str) else json.dumps(content, sort_keys=True)
+    stripped = text.strip()
+    first = stripped.splitlines()[0] if stripped else ""
+    return f"{tool_name}|{_normalise(call_input, 200)}|{_normalise(first, 160)}"
 
 
 def read_attempts(transcript: Path) -> list[tuple[str, bool, str]]:
@@ -66,7 +77,7 @@ def read_attempts(transcript: Path) -> list[tuple[str, bool, str]]:
     except OSError:
         return []
 
-    names: dict[str, str] = {}
+    calls: dict[str, tuple[str, object]] = {}
     results: list[tuple[str, bool, str]] = []
     for line in raw.splitlines():
         try:
@@ -82,12 +93,12 @@ def read_attempts(transcript: Path) -> list[tuple[str, bool, str]]:
             if not isinstance(block, dict):
                 continue
             if block.get("type") == "tool_use" and isinstance(block.get("id"), str):
-                names[block["id"]] = str(block.get("name", "?"))
+                calls[block["id"]] = (str(block.get("name", "?")), block.get("input"))
             elif block.get("type") == "tool_result":
-                tool = names.get(str(block.get("tool_use_id")), "?")
+                tool, call_input = calls.get(str(block.get("tool_use_id")), ("?", None))
                 # is_error arrives as a bool or as the string "True".
                 failed = str(block.get("is_error", "")).lower() == "true"
-                results.append((signature(tool, block.get("content")), failed, tool))
+                results.append((signature(tool, call_input, block.get("content")), failed, tool))
     return results
 
 
