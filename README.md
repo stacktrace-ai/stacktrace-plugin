@@ -11,8 +11,8 @@ no detection rules, uploader, credential, or independent sync cursor.
 ## Requirements
 
 - Claude Code with plugin support
-- A `stacktrace` CLI release that includes `remote auto-sync`, and — for the
-  notification surface below — `notify next` and `finding dismiss|mute|why`
+- A `stacktrace` CLI release that includes `remote auto-sync` (the findings
+  surface below works without it)
 - Python 3.11 or newer (also required by `stacktrace-cli`)
 
 ## Install
@@ -49,34 +49,46 @@ Claude Code starts both hooks with `async: true`. A small launcher forwards only
 CLI worker so a non-interactive Claude teardown cannot cancel it. The CLI owns
 the machine-wide lock, checkpoints, retries, local status, and log.
 
-## Findings in the terminal
+## Findings while the session is still running
 
-A finding nobody reads is not a notification, and Claude Code never reads an
-asynchronous hook's output. So `Stop` carries a second, synchronous handler that
-asks the CLI what is pending and prints it — a local query, capped at two
-seconds, with no detection and no network call of its own (ADR-0002).
+`Stop` is too late for the findings worth interrupting: an agent looping on one
+failing call inside a single long turn produces no `Stop` until the loop is
+already over. So detection runs on `PostToolUseFailure`, on each failure.
+
+It reads the tail of the transcript Claude Code already passes the hook, joins
+tool calls to their results, and measures the trailing run of one identical
+failure signature. At three, it says so:
 
 ```
-▐ medium · high · stacktrace-progress-stall ×4 here
-▐ Same test failing since turn 22 — three attempts, no change between them
-▐   • turns 22, 26, 31 · identical failure signature
-▐   • 0 successful runs in the window
-▐   → This isn't converging. Change the approach or take it back.
+▐ medium · high · stacktrace-progress-stall
+▐ Bash has failed 3 times with the same error and no change in between
+▐   • 3 consecutive Bash failures · identical error signature
+▐   • 0 successful runs between them
+▐   → This isn't converging. Change the approach or hand it back.
 ```
+
+It fires at three and not at four — the fourth identical failure is the same
+finding, and re-announcing it is how an alert becomes wallpaper. That is also
+what keeps it stateless: no counter is stored, because the streak is re-read from
+the transcript every time.
+
+No CLI is required for any of this. No state file either.
 
 The two grades are separate on purpose: **severity** is how much it matters,
-**confidence** is how sure we are it happened. The gutter and headline take
-their colour from severity, and the words carry the same information for a
-terminal with `NO_COLOR`, a piped session, or a reader who cannot separate the
-hues. Set `STACKTRACE_COLOR=never` to turn colour off, `always` to force it.
+**confidence** is how sure we are it happened. Colour reinforces severity and
+never carries it alone — `NO_COLOR` is honoured, `STACKTRACE_COLOR=never|always`
+overrides, and the words say the same thing on a monochrome terminal.
 
-When a finding could not see everything, it says so inline
-(`◐ partial coverage · insufficient_context`) rather than presenting a hedged
-claim as a confident one. Full coverage is left for `/stacktrace:why`.
+### Reaching someone who is not at the terminal
 
-The plugin keeps no state behind any of this. Which finding is pending, how many
-times its rule has fired, and whether the action row still needs showing are all
-answers the CLI returns.
+The hook also returns `additionalContext`, telling Claude a finding exists and to
+call `PushNotification` if the operator may be away. That tool already suppresses
+itself when the terminal is active, so it is the right place for the judgement.
+The notice bounds Claude to reporting: do not investigate, do not repeat what is
+already on screen.
+
+This requires nothing of the operator beyond what Claude Code already does.
+Phone delivery additionally needs Remote Control connected.
 
 Automatic runtime sync never enables model reasoning. It uses Stacktrace's
 local deterministic rules. Failed work remains uncheckpointed and can retry on

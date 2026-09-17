@@ -24,12 +24,13 @@ bash scripts/install-hooks.sh
 - Hook launchers may forward only `session_id`, `transcript_path`, `cwd`, and
   `hook_event_name`. Never persist or forward prompt, response, or tool content.
 - Sync work must remain asynchronous and non-blocking. The one synchronous hook
-  is the finding renderer (ADR-0002): it may only query the CLI, is capped at
-  two seconds, and must print nothing when anything is missing or malformed.
+  is the stall detector (ADR-0002): local transcript read only, capped at five
+  seconds, and silent whenever anything is missing or malformed.
 - Sync state and logs belong under Stacktrace's own state directory; the plugin
-  owns no cursor or retry state. It also owns no notification state: delivery,
-  firing counts, dismissals, and mutes are the CLI's, and reach the plugin only
-  as fields in a response.
+  owns no cursor or retry state, and no notification state either — a streak is
+  re-derived from the transcript, never remembered between firings.
+- The detector may read the transcript in process. It must never persist or
+  forward what it read; a failure leaves the hook as a signature and a count.
 - Keep the plugin thin. Product logic belongs in `stacktrace-cli`.
 
 ## Presentation

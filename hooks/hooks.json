@@ -1,5 +1,5 @@
 {
-  "description": "Synchronize changed Stacktrace runtime state without blocking Claude Code, and render findings the CLI has already decided to surface.",
+  "description": "Synchronize changed Stacktrace runtime state without blocking Claude Code, and surface a stalling session while it is still running.",
   "hooks": {
     "Stop": [
       {
@@ -8,11 +8,6 @@
             "type": "command",
             "command": "\"${CLAUDE_PLUGIN_ROOT}\"/scripts/launch_auto_sync.py",
             "async": true
-          },
-          {
-            "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/scripts/render_finding.py",
-            "timeout": 5
           }
         ]
       }
@@ -24,6 +19,17 @@
             "type": "command",
             "command": "\"${CLAUDE_PLUGIN_ROOT}\"/scripts/launch_auto_sync.py",
             "async": true
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/scripts/detect_and_notify.py",
+            "timeout": 5
           }
         ]
       }

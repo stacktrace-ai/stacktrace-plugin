@@ -61,22 +61,32 @@ def main() -> int:
         )
 
     configured = hooks.get("hooks")
-    if not isinstance(configured, dict) or set(configured) != {"Stop", "SessionEnd"}:
-        fail("hooks must contain exactly Stop and SessionEnd")
+    if not isinstance(configured, dict) or set(configured) != {
+        "Stop",
+        "SessionEnd",
+        "PostToolUseFailure",
+    }:
+        fail("hooks must contain exactly Stop, SessionEnd and PostToolUseFailure")
+
     sync_launcher = {
         "type": "command",
         "command": '"${CLAUDE_PLUGIN_ROOT}"/scripts/launch_auto_sync.py',
         "async": True,
     }
-    # ADR-0002: Stop also renders, and rendering has to be synchronous because
-    # Claude Code never reads an async hook's stdout. SessionEnd stays
-    # metadata-only -- there is nobody left to read a finding there.
-    renderer = {
+    # ADR-0002: detection is synchronous because its output has to be read --
+    # Claude Code never reads an async hook's stdout -- and it fires on tool
+    # failure rather than at Stop, because a loop inside one long turn produces
+    # no Stop until the loop is already over.
+    detector = {
         "type": "command",
-        "command": '"${CLAUDE_PLUGIN_ROOT}"/scripts/render_finding.py',
+        "command": '"${CLAUDE_PLUGIN_ROOT}"/scripts/detect_and_notify.py',
         "timeout": 5,
     }
-    expected_handlers = {"Stop": [sync_launcher, renderer], "SessionEnd": [sync_launcher]}
+    expected_handlers = {
+        "Stop": [sync_launcher],
+        "SessionEnd": [sync_launcher],
+        "PostToolUseFailure": [detector],
+    }
 
     for event, matchers in configured.items():
         if not isinstance(matchers, list) or len(matchers) != 1:
@@ -87,7 +97,7 @@ def main() -> int:
         if matcher.get("hooks") != expected_handlers[event]:
             fail(f"{event} must invoke exactly its documented handlers, in order")
 
-    for name in ("launch_auto_sync.py", "render_finding.py"):
+    for name in ("launch_auto_sync.py", "detect_and_notify.py"):
         script = ROOT / "scripts" / name
         if not script.is_file() or not script.stat().st_mode & stat.S_IXUSR:
             fail(f"scripts/{name} must exist and be executable")

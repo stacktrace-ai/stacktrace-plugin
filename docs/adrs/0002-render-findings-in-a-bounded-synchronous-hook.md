@@ -1,6 +1,6 @@
 ---
 id: 0002
-title: Render findings in a bounded synchronous hook
+title: Detect and surface a stall from the transcript
 status: accepted
 date: 2026-09-17
 supersedes: null
@@ -11,63 +11,67 @@ superseded-by: null
 
 ADR-0001 made both lifecycle hooks asynchronous so a sync outliving the turn is
 never cancelled. An asynchronous hook is fire-and-forget: Claude Code does not
-read its stdout, so nothing it prints can reach the operator.
+read its stdout, so nothing it prints can reach anybody.
 
-A finding nobody sees is not a notification. Stacktrace detects that an agent
-repeated a failure or reported work it did not do, and the operator learns about
-it on a dashboard they are not looking at. The host integration is the only
-place able to put that in front of them at the moment it matters.
+A finding nobody sees is not a notification. Two further constraints decide the
+shape of the fix.
 
-Claude Code renders a hook's `systemMessage` only for a synchronous hook, and
-prefixes it with the hook's event name, so the surface is fixed: a `Stop` hook
-that returns quickly.
+**`Stop` is too late for the findings worth interrupting.** It fires when a turn
+ends. An agent looping on one failing call inside a single long turn produces no
+`Stop` until the loop is already over, which is exactly when knowing costs
+nothing. `PostToolUseFailure` fires on each failure instead.
+
+**The plugin cannot assume the CLI.** Requiring a `stacktrace` release for the
+plugin to say anything makes the notification surface undeployable until that
+release lands, on every machine, in step.
 
 ## Decision
 
-`Stop` carries two handlers. The existing asynchronous launcher is unchanged and
-still detaches the sync worker. A second, synchronous handler runs
-`scripts/render_finding.py`, which:
+`PostToolUseFailure` runs `scripts/detect_and_notify.py` synchronously, capped at
+five seconds. It reads the tail of `transcript_path`, which Claude Code already
+supplies, joins `tool_use` blocks to their `tool_result` blocks, and measures the
+trailing run of one identical failure signature. At exactly three it emits a
+finding. `Stop` and `SessionEnd` are unchanged and still detach the sync worker.
 
-1. accepts only a `Stop` document and reads only `session_id`;
-2. runs `stacktrace notify next --session <id> --format json`;
-3. renders the returned finding to `systemMessage` and exits;
-4. prints nothing when the CLI is absent, fails, times out, answers with no
-   finding, or answers with a malformed one.
+The detector is **stateless**. A streak is re-derived from the transcript on each
+firing rather than remembered, and suppression falls out of firing on the
+threshold exactly: the fourth identical failure is the same finding, so it
+produces nothing. No state file, no cursor, no delivery marks.
 
-The query is capped at two seconds. It performs no detection, no upload and no
-network call: the CLI answers it from state the detached worker already wrote.
+Output has two audiences:
 
-**The plugin owns nothing.** It does not queue findings, mark them delivered,
-track which have been shown, count firings, or hold suppression state. Every one
-of those answers arrives inside the CLI's JSON — including `fired_here` and
-`show_actions`, which decide the repeat count and whether the action row appears.
-The renderer is a formatter with no memory.
+- `systemMessage` renders the finding for the person at the terminal.
+- `additionalContext` tells Claude a finding exists and to call
+  `PushNotification` if the operator may be away. That tool suppresses itself
+  when the terminal is active, so the judgement it needs is one it already makes.
+  The notice bounds Claude explicitly: report, do not investigate, do not repeat.
 
 ## Alternatives considered
 
-- **Keep `Stop` asynchronous and notify out of band.** Rejected: a desktop or
-  Slack notification cannot show the operator the evidence in the place they are
-  already working, which is the entire value of a host integration.
-- **Let the plugin read the CLI's state directory.** Rejected: it would give the
-  plugin a second opinion about what is pending, and a path it must keep in step
-  with the CLI's own layout. ADR-0001 kept that ownership in one place.
-- **Render at `SessionEnd`.** Rejected: the operator has stopped working, and a
-  stalled agent is worth interrupting while the session is still open.
-- **Render from `PreToolUse` mid-turn.** Deferred, not rejected. It is the only
-  way to reach the operator before a turn completes, and it needs its own
-  argument about interrupting work in progress.
+- **Keep everything asynchronous.** Rejected: an async hook's output is never
+  read, so the plugin could detect and still tell nobody.
+- **Query the CLI for a pending finding.** Rejected after first building it: it
+  made every notification wait on an unreleased `stacktrace notify next`.
+- **Detect at `Stop`.** Rejected: see above, the loop has already ended.
+- **Track streaks in a plugin-owned state file.** Rejected: the transcript is
+  already an append-only record of exactly these events, and a second copy can
+  disagree with it.
+- **`PreToolUse` to block the next call.** Deferred. Halting an agent needs its
+  own argument, and nothing here halts anything.
 
 ## Consequences
 
-`Stop` now blocks on a local CLI query bounded at two seconds. That is a
-different class of blocking from the sync ADR-0001 detached: it makes no network
-call and cannot outlive the turn. An install without `stacktrace` on `PATH` pays
-one failed `shutil.which` and prints nothing.
+The plugin now contains one detection rule, which ADR-0001 deliberately kept out
+of it. That boundary is narrowed rather than abandoned: the rule is
+deterministic, reads only the local transcript, writes nothing, uploads nothing,
+and does not duplicate the CLI's consent, cursor, lock or retry model. A richer
+catalogue still belongs in `stacktrace-cli`.
 
-Claude Code prefixes the rendered block with `Stop says:`. The prefix is the
-event name and cannot be configured, so the format opens with a blank line and
-lets the prefix occupy its own row rather than crowding the headline.
+Reading the transcript means the plugin touches tool content. It is read in
+process, reduced to a signature, and never persisted or forwarded — the
+forwarding boundary from ADR-0001 is unchanged.
 
-The CLI must provide `stacktrace notify next`, and the three finding commands the
-action row advertises. Until that release lands, the hook is inert by design: no
-subcommand, non-zero exit, nothing rendered.
+`PostToolUseFailure` appears in this Claude Code build's hook schema but not in
+its published event list. If it is renamed or withdrawn, the hook stops firing
+and the plugin goes quiet rather than breaking; the contract test pins the name
+so the failure is visible in CI.
