@@ -31,6 +31,10 @@ def arguments(request: dict) -> list[str]:
     if service_url is not None:
         if not isinstance(service_url, str) or any(ord(c) < 32 for c in service_url):
             raise ValueError("Use an HTTPS Slack service origin.")
+        try:
+            service_url.encode("utf-8")
+        except UnicodeEncodeError:
+            raise ValueError("Use an HTTPS Slack service origin.") from None
         url = urlsplit(service_url)
         if (url.scheme != "https" or not url.hostname or url.username is not None
                 or url.password is not None or url.query or url.fragment or url.path not in ("", "/")):

@@ -143,6 +143,12 @@ class SlackWorkflowTests(unittest.TestCase):
                 self.assertEqual(response.returncode, 2)
                 self.assertFalse(self.capture.exists())
 
+    def test_rejects_unencodable_surrogate_in_service_url(self):
+        response = self.run_workflow({"action": "status", "service_url": "https://example.com\ud800"})
+        self.assertEqual(response.returncode, 2, response.stderr)
+        self.assertFalse(self.capture.exists())
+        self.assertNotIn("Traceback", response.stderr)
+
     def test_missing_adapter_explains_optional_dependency(self):
         self.executable.unlink()
         response = self.run_workflow({"action": "status"})
