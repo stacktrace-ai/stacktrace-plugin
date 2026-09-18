@@ -29,7 +29,10 @@ TAIL_BYTES = 512 * 1024
 
 SEVERITY_COLOURS = {"low": "2", "medium": "33", "high": "31"}
 
-#: Volatile substrings that make two runs of the same failure look different.
+#: Volatile substrings that make two runs of the same *error* look different.
+#: Applied to the failure output only -- a call's own arguments (paths,
+#: line numbers, ports) are exactly what tells two different calls apart, so
+#: they must survive normalisation intact.
 _NOISE = (
     (re.compile(r"0x[0-9a-fA-F]+"), "0xX"),
     (re.compile(r"\d+(?:[.,:]\d+)*"), "N"),
@@ -54,6 +57,15 @@ def _normalise(value: object, limit: int) -> str:
     return text.strip().lower()[:limit]
 
 
+def _normalise_call(value: object, limit: int) -> str:
+    """Fold whitespace and case only. Unlike `_normalise`, this keeps paths and
+    numbers intact -- they're the part of a call that distinguishes it from a
+    different call, which is the whole reason it's in the signature."""
+    text = value if isinstance(value, str) else json.dumps(value, sort_keys=True)
+    text = re.sub(r"\s+", " ", text)
+    return text.strip().lower()[:limit]
+
+
 def signature(tool_name: str, call_input: object, content: object) -> str:
     """Identity of one failing *call*, not of one error string.
 
@@ -64,7 +76,15 @@ def signature(tool_name: str, call_input: object, content: object) -> str:
     text = content if isinstance(content, str) else json.dumps(content, sort_keys=True)
     stripped = text.strip()
     first = stripped.splitlines()[0] if stripped else ""
-    return f"{tool_name}|{_normalise(call_input, 200)}|{_normalise(first, 160)}"
+    return f"{tool_name}|{_normalise_call(call_input, 200)}|{_normalise(first, 160)}"
+
+
+def is_truncated(transcript: Path) -> bool:
+    """Whether the tail read could have cut off attempts older than the window."""
+    try:
+        return transcript.stat().st_size > TAIL_BYTES
+    except OSError:
+        return False
 
 
 def read_attempts(transcript: Path) -> list[tuple[str, bool, str]]:
@@ -86,7 +106,10 @@ def read_attempts(transcript: Path) -> list[tuple[str, bool, str]]:
             continue  # A partial first line is expected when seeking into the file.
         if not isinstance(record, dict):
             continue
-        blocks = (record.get("message") or {}).get("content")
+        message = record.get("message")
+        if not isinstance(message, dict):
+            continue  # A truthy non-dict `message` (e.g. a list) must not crash the hook.
+        blocks = message.get("content")
         if not isinstance(blocks, list):
             continue
         for block in blocks:
@@ -180,11 +203,20 @@ def main() -> int:
     if not isinstance(transcript, str) or not transcript:
         return 0
 
-    found = streak(read_attempts(Path(transcript)))
+    path = Path(transcript)
+    attempts = read_attempts(path)
+    found = streak(attempts)
     # Fire on the threshold only. The fourth identical failure is the same
     # finding, and re-announcing it is how an alert becomes wallpaper -- this is
     # also what keeps suppression stateless.
     if found is None or found[0] != STALL_THRESHOLD:
+        return 0
+    # A truncated tail whose streak runs all the way to the edge of the window
+    # may have more identical failures before it that the read never saw. The
+    # true count could be anything at or past the threshold, so treating this
+    # as the one, exact crossing of it would risk re-firing on every later
+    # failure instead of the one time the design promises.
+    if is_truncated(path) and found[0] == len(attempts):
         return 0
 
     finding = finding_for(*found)

@@ -76,6 +76,14 @@ class SignatureTests(unittest.TestCase):
             detector.signature("Bash", {"command": "npm run build"}, "Exit code 1"),
         )
 
+    def test_different_call_arguments_are_not_one_streak(self) -> None:
+        """A path or number in the call is what tells two calls apart; the
+        error-normalisation noise must not erase it from the call side too."""
+        self.assertNotEqual(
+            detector.signature("Bash", {"command": "pytest /repo/a.py"}, "Exit code 1"),
+            detector.signature("Bash", {"command": "pytest /repo/b.py"}, "Exit code 1"),
+        )
+
 
 class StreakTests(unittest.TestCase):
     def test_streak_counts_only_the_trailing_identical_failures(self) -> None:
@@ -92,6 +100,102 @@ class StreakTests(unittest.TestCase):
 
     def test_unreadable_transcript_is_silent(self) -> None:
         self.assertEqual(detector.read_attempts(Path("/nonexistent/transcript.jsonl")), [])
+
+    def test_a_truthy_non_dict_message_is_ignored_not_crashed_on(self) -> None:
+        """A synchronous hook must fail silent on a malformed record, not raise."""
+        handle = tempfile.NamedTemporaryFile("w", suffix=".jsonl", delete=False)
+        handle.write(json.dumps({"type": "user", "message": ["not", "a", "dict"]}) + "\n")
+        handle.close()
+
+        self.assertEqual(detector.read_attempts(Path(handle.name)), [])
+
+
+class TruncationTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self._tail_bytes = detector.TAIL_BYTES
+
+    def tearDown(self) -> None:
+        detector.TAIL_BYTES = self._tail_bytes
+
+    def test_untruncated_file_is_not_truncated(self) -> None:
+        path = transcript(("a", "Bash", True))
+        self.assertFalse(detector.is_truncated(path))
+
+    def test_file_larger_than_the_window_is_truncated(self) -> None:
+        detector.TAIL_BYTES = 10
+        path = transcript(("a", "Bash", True))
+        self.assertTrue(detector.is_truncated(path))
+
+    def test_streak_touching_a_truncated_window_does_not_refire(self) -> None:
+        """Six identical failures, but the window is shrunk to fit only the last
+        three complete attempts. Without truncation-awareness this reports a
+        fresh exact-threshold streak of 3 -- re-firing an alert that already
+        fired for real attempt 3, defeating fire-once and turning it into
+        wallpaper."""
+        big = "X" * 900
+        lines: list[str] = []
+        for n in range(6):
+            call_id = str(n)
+            lines.append(
+                json.dumps(
+                    {
+                        "type": "assistant",
+                        "message": {
+                            "content": [
+                                {
+                                    "type": "tool_use",
+                                    "id": call_id,
+                                    "name": "Bash",
+                                    "input": {"command": "pytest"},
+                                }
+                            ]
+                        },
+                    }
+                )
+            )
+            lines.append(
+                json.dumps(
+                    {
+                        "type": "user",
+                        "message": {
+                            "content": [
+                                {
+                                    "type": "tool_result",
+                                    "tool_use_id": call_id,
+                                    "is_error": "True",
+                                    "content": "Exit code 1\n" + big,
+                                }
+                            ]
+                        },
+                    }
+                )
+            )
+        handle = tempfile.NamedTemporaryFile("w", suffix=".jsonl", delete=False)
+        handle.write("\n".join(lines) + "\n")
+        handle.close()
+        path = Path(handle.name)
+
+        pair_len = len(lines[-1]) + len(lines[-2]) + 2
+        detector.TAIL_BYTES = pair_len * 3 + 50  # room for exactly the last 3 pairs
+
+        attempts = detector.read_attempts(path)
+        self.assertEqual(detector.streak(attempts), (3, "Bash"))
+        self.assertTrue(detector.is_truncated(path))
+
+        import io
+
+        stdin, stdout = sys.stdin, sys.stdout
+        sys.stdin = io.StringIO(
+            json.dumps({"hook_event_name": "PostToolUseFailure", "transcript_path": str(path)})
+        )
+        sys.stdout = io.StringIO()
+        try:
+            detector.main()
+            output = sys.stdout.getvalue()
+        finally:
+            sys.stdin, sys.stdout = stdin, stdout
+
+        self.assertEqual(output, "")
 
 
 class RenderTests(unittest.TestCase):
