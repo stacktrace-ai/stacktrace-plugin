@@ -1,19 +1,24 @@
-# Stacktrace Claude Code Plugin
+# Stacktrace Plugin
 
-Stacktrace automatically analyzes Claude Code runtime activity and returns
-high-severity findings to the session that produced them.
+Stacktrace host integrations automatically analyze agent runtime activity and
+return high-severity findings to the session that produced them. Claude Code is
+the first supported host.
 
-The plugin is a thin adapter over the Stacktrace CLI. It declares one
-session-lifetime monitor, adds notification guidance at session start, and
-provides configure, status, and findings workflows. Parsing, detection, policy,
-persistence, and routing remain in Stacktrace.
+Each host integration is a thin adapter over the Stacktrace CLI and daemon. The
+Claude adapter declares one session-lifetime monitor, adds notification guidance
+at session start, and provides configure, status, and findings workflows.
+Parsing, detection, policy, persistence, and routing remain in Stacktrace.
+
+Future Codex and Cursor adapters belong in this repository. Host-specific
+packaging and lifecycle integration stay separate; they share the Stacktrace
+daemon interface rather than duplicating detection logic.
 
 ## Install
 
 During early testing, install directly from this repository:
 
 ```text
-/plugin marketplace add stacktrace-ai/stacktrace-claude-plugin
+/plugin marketplace add stacktrace-ai/stacktrace-plugin
 /plugin install stacktrace@stacktrace
 /stacktrace:configure
 ```
