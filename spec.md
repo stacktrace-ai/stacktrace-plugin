@@ -386,19 +386,3 @@ No active session should cause full rescans on every filesystem event.
   invoke `PushNotification`.
 - The latency instrumentation can distinguish native-log flush time,
   detection time, and delivery time.
-
-## Known constraints and review questions
-
-- Claude plugin monitors are experimental and limited to supported interactive
-  surfaces. Is that acceptable for the Claude MVP if findings remain available
-  through the daemon and CLI elsewhere?
-- `PushNotification` is model-mediated and not an end-to-end delivery
-  guarantee. Is durable local finding storage plus a model-independent alert
-  for agent-unavailable failures the right MVP guarantee?
-- An acknowledgement currently means "written to Claude monitor stdout," not
-  "device push confirmed." Do we need a later `PostToolUse` acknowledgement for
-  `PushNotification`, or is that unnecessary complexity?
-- Which high/critical rule families should be eligible for immediate
-  notification by default?
-- What minimum Claude Code version should the plugin require for monitors,
-  `CLAUDE_CODE_SESSION_ID`, and `PushNotification`?
