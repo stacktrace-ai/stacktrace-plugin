@@ -47,7 +47,7 @@ class PluginContractTests(unittest.TestCase):
         )
         self.assertEqual(len(monitors), 1)
         self.assertEqual(
-            monitors[0]["command"], "stacktrace daemon subscribe --host claude-code"
+            monitors[0]["command"], "stacktrace daemon subscribe --agent-kind claude-code"
         )
 
 
