@@ -79,9 +79,34 @@ class SlackWorkflowTests(unittest.TestCase):
              "project_label": "/home/alice/private-project"},
             {"action": "connect", "project_id": "project1",
              "project_label": "Demo", "device_label": "C:\\Users\\alice\\private-project"},
+            {"action": "connect", "project_id": "project1",
+             "project_label": "../private-project"},
+            {"action": "connect", "project_id": "project1",
+             "project_label": "./private-project"},
+            {"action": "connect", "project_id": "project1",
+             "project_label": "  /home/alice/private-project  "},
         ):
             with self.subTest(value=value):
                 response = self.run_workflow(value)
+                self.assertEqual(response.returncode, 2)
+                self.assertFalse(self.capture.exists())
+
+    def test_trims_surrounding_whitespace_from_safe_labels(self):
+        response = self.run_workflow({
+            "action": "connect", "project_id": "project1", "project_label": "  Demo  ",
+        })
+        self.assertEqual(response.returncode, 0, response.stderr)
+        argv = json.loads(self.capture.read_text())
+        self.assertIn("Demo", argv)
+
+    def test_rejects_control_characters_in_service_url(self):
+        for service_url in (
+            "https://example.com\x00",
+            "https://example.com\n",
+            "https://example.com\r\nHost: evil",
+        ):
+            with self.subTest(service_url=service_url):
+                response = self.run_workflow({"action": "status", "service_url": service_url})
                 self.assertEqual(response.returncode, 2)
                 self.assertFalse(self.capture.exists())
 

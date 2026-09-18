@@ -11,7 +11,7 @@ import sys
 from urllib.parse import urlsplit
 
 IDENTIFIER = re.compile(r"[A-Za-z0-9_-]{1,128}\Z")
-PATH_SHAPED = re.compile(r"\A(?:[A-Za-z]:[\\/]|\\\\|~[\\/]|/)")
+PATH_SHAPED = re.compile(r"\A(?:[A-Za-z]:[\\/]|\\\\|~[\\/]|\.\.?[\\/]|/)")
 
 
 def arguments(request: dict) -> list[str]:
@@ -28,7 +28,7 @@ def arguments(request: dict) -> list[str]:
     result = ["--connection", connection]
     service_url = request.get("service_url")
     if service_url is not None:
-        if not isinstance(service_url, str):
+        if not isinstance(service_url, str) or any(ord(c) < 32 for c in service_url):
             raise ValueError("Use an HTTPS Slack service origin.")
         url = urlsplit(service_url)
         if (url.scheme != "https" or not url.hostname or url.username is not None
@@ -43,7 +43,10 @@ def arguments(request: dict) -> list[str]:
         result += ["--project-id", project_id]
         for name in ("project_label", "device_label"):
             label = request.get(name, "My device" if name == "device_label" else None)
-            if (not isinstance(label, str) or not label.strip() or len(label) > 80
+            if not isinstance(label, str):
+                raise ValueError("Connect requires short, printable project and device labels.")
+            label = label.strip()
+            if (not label or len(label) > 80
                     or any(ord(c) < 32 for c in label) or PATH_SHAPED.match(label)):
                 raise ValueError(
                     "Connect requires short, printable project and device labels, not filesystem paths."
