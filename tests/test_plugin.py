@@ -22,7 +22,7 @@ class PluginContractTests(unittest.TestCase):
 
     def test_session_start_emits_only_the_notification_contract(self) -> None:
         result = subprocess.run(
-            [sys.executable, str(ROOT / "scripts" / "session_start.py")],
+            ["sh", str(ROOT / "scripts" / "session_start.sh")],
             check=True,
             capture_output=True,
             text=True,

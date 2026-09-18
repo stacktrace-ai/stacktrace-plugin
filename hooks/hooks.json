@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/session_start.py\""
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/scripts/session_start.sh\""
           }
         ]
       }

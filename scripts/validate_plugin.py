@@ -62,7 +62,7 @@ def main() -> int:
         fail("hooks must contain only SessionStart guidance")
     expected_handler = {
         "type": "command",
-        "command": 'python3 "${CLAUDE_PLUGIN_ROOT}/scripts/session_start.py"',
+        "command": 'sh "${CLAUDE_PLUGIN_ROOT}/scripts/session_start.sh"',
     }
     try:
         handler = configured["SessionStart"][0]["hooks"][0]
@@ -81,9 +81,9 @@ def main() -> int:
     if observed_skills != expected_skills:
         fail(f"expected skills {sorted(expected_skills)}, found {sorted(observed_skills)}")
 
-    guidance = ROOT / "scripts" / "session_start.py"
+    guidance = ROOT / "scripts" / "session_start.sh"
     if not guidance.is_file() or not guidance.stat().st_mode & stat.S_IXUSR:
-        fail("scripts/session_start.py must exist and be executable")
+        fail("scripts/session_start.sh must exist and be executable")
 
     forbidden = [ROOT / ".mcp.json", ROOT / "settings.json", ROOT / "bin"]
     present = [path.name for path in forbidden if path.exists()]
