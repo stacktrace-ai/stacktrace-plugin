@@ -59,6 +59,24 @@ class SlackWorkflowTests(unittest.TestCase):
         self.assertIn("connect", argv)
         self.assertFalse(marker.exists())
 
+    def test_flush_drains_the_queue_without_connect_only_fields(self):
+        response = self.run_workflow({"action": "flush", "connection": "work"})
+        self.assertEqual(response.returncode, 0, response.stderr)
+        argv = json.loads(self.capture.read_text())
+        self.assertEqual(argv, ["--connection", "work", "flush"])
+
+    def test_flush_rejects_project_and_device_fields(self):
+        for field in ("project_id", "project_label", "device_label"):
+            with self.subTest(field=field):
+                response = self.run_workflow({"action": "flush", field: "Demo"})
+                self.assertEqual(response.returncode, 2)
+                self.assertFalse(self.capture.exists())
+
+    def test_flush_timeout_says_queued_work_is_retained(self):
+        message = _load_slack_module().timeout_message("flush")
+        self.assertIn("remain queued", message)
+        self.assertIn("retry flush", message)
+
     def test_four_workflows_preserve_adapter_exit_status(self):
         for action in ("status", "test", "disconnect"):
             with self.subTest(action=action):

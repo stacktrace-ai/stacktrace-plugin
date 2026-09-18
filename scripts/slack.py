@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-"""Dispatch an explicit Slack workflow to the installed, optional local adapter."""
+"""Dispatch an explicit Slack workflow to the installed, optional local adapter.
+
+Connection management and queue recovery only. Publishing findings is the
+daemon's job and stays out of this bridge deliberately: the monitor feed is a
+notification stream, not a publish API, and reconstructing a finding from its
+text would invent a second schema.
+"""
 
 from __future__ import annotations
 
@@ -25,8 +31,8 @@ def arguments(request: dict) -> list[str]:
     if not isinstance(request, dict) or set(request) - allowed:
         raise ValueError("Use only the documented Slack workflow fields.")
     action = request.get("action")
-    if action not in {"connect", "status", "test", "disconnect"}:
-        raise ValueError("Choose connect, status, test, or disconnect.")
+    if action not in {"connect", "status", "test", "flush", "disconnect"}:
+        raise ValueError("Choose connect, status, test, flush, or disconnect.")
     connection = request.get("connection", "default")
     if not isinstance(connection, str) or not IDENTIFIER.fullmatch(connection):
         raise ValueError("Use a simple connection name.")
@@ -69,6 +75,9 @@ def arguments(request: dict) -> list[str]:
 def timeout_message(action: str) -> str:
     if action == "connect":
         return "Slack workflow timed out. Retry connect to resume pending pairing."
+    if action == "flush":
+        # Flush is idempotent on event ID, so retrying cannot duplicate a finding.
+        return "Slack workflow timed out. Queued findings remain queued; retry flush."
     return f"Slack workflow timed out. Retry {action} if it did not complete."
 
 
