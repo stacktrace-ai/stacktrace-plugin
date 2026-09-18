@@ -33,16 +33,17 @@ SEVERITY_COLOURS = {"low": "2", "medium": "33", "high": "31"}
 #: Volatile substrings that make two runs of the same *error* look different.
 #: Applied to the failure output only -- a call's own arguments (paths,
 #: line numbers, ports) are exactly what tells two different calls apart, so
-#: they must survive normalisation intact. Numbers are normalised only in a
-#: recognised timing phrase (`after 1.2s`); a bare number, even one that
-#: happens to carry a time unit (`expected 1ms, got 2ms`), is as likely to be
-#: part of the diagnostic itself -- an assertion's expected or actual value,
-#: a count -- and erasing it can hide a genuinely different failure behind
-#: an identical-looking signature. Paths fold the same way: only a known
-#: volatile location (a temp dir, unique per run) is noise; a source path
-#: like `/repo/a.py` is usually the diagnostic -- which file failed.
+#: they must survive normalisation intact. Every fold here is deliberately
+#: narrow: numbers only in a recognised timing phrase (`after 1.2s`), paths
+#: only under a known temp location, hex only long enough to be address-like
+#: (`0x1` is likelier a diagnosed value than a pointer). Case is not folded
+#: at all -- nothing here demonstrates a need to, and a diagnosed value can
+#: be case itself (`expected 'FOO', got 'foo'`). A bare, short, or
+#: lowercase-only value is as likely to be the diagnostic itself as it is to
+#: be volatile noise, and erasing it can hide a genuinely different failure
+#: behind an identical-looking signature.
 _NOISE = (
-    (re.compile(r"0x[0-9a-fA-F]+"), "0xX"),
+    (re.compile(r"\b0x[0-9a-fA-F]{6,}\b"), "0xX"),
     (
         re.compile(
             r"\bafter\s+\d+(?:\.\d+)?\s*(?:ms|s|secs?|seconds?|mins?|minutes?|hours?|h)\b",
@@ -75,10 +76,13 @@ def _bounded(text: str, limit: int) -> str:
 
 
 def _normalise(value: object, limit: int) -> str:
+    """Fold only the specific volatile patterns in `_NOISE`. Case is left
+    exactly as reported -- a diagnosed value can be case itself, and nothing
+    here has ever demonstrated a need to fold it away."""
     text = value if isinstance(value, str) else json.dumps(value, sort_keys=True)
     for pattern, replacement in _NOISE:
         text = pattern.sub(replacement, text)
-    return _bounded(text.strip().lower(), limit)
+    return _bounded(text.strip(), limit)
 
 
 def _normalise_call(value: object, limit: int) -> str:

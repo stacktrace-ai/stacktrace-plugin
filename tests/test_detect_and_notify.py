@@ -94,6 +94,34 @@ class SignatureTests(unittest.TestCase):
             detector.signature("Bash", call, "FAILED /repo/b.py"),
         )
 
+    def test_changing_diagnostic_case_is_not_one_streak(self) -> None:
+        """Case can be the value being diagnosed, not incidental formatting;
+        folding it away must not collapse three different diagnoses."""
+        call = {"command": "pytest"}
+        self.assertNotEqual(
+            detector.signature("Bash", call, "expected 'FOO', got 'foo'"),
+            detector.signature("Bash", call, "expected 'Foo', got 'foo'"),
+        )
+
+    def test_short_hex_values_are_not_one_streak(self) -> None:
+        """A short hex literal (`0x1`) is likelier a diagnosed value than a
+        pointer; only address-like hex (long enough to plausibly be one)
+        folds."""
+        call = {"command": "pytest"}
+        self.assertNotEqual(
+            detector.signature("Bash", call, "expected 0x1, got 0x2"),
+            detector.signature("Bash", call, "expected 0x2, got 0x3"),
+        )
+
+    def test_address_like_hex_still_folds(self) -> None:
+        """A long hex value (a pointer, a memory address) is exactly the
+        volatile-per-run noise the fold exists for."""
+        call = {"command": "pytest"}
+        self.assertEqual(
+            detector.signature("Bash", call, "segfault at 0x7f8a1b2c3d40"),
+            detector.signature("Bash", call, "segfault at 0x7f8a1b2c9999"),
+        )
+
     def test_different_tools_are_different_failures(self) -> None:
         self.assertNotEqual(
             detector.signature("Bash", {}, "boom"), detector.signature("Edit", {}, "boom")
