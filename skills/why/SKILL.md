@@ -23,3 +23,8 @@ apart.
 Evidence carries spans, kinds, and coordinates, never the matched content. Do not
 supplement it by reading the user's source, transcript, or credentials to explain
 a finding further.
+
+`stacktrace-progress-stall` is the exception: it's detected locally by a
+stateless hook that never reaches the CLI, so there is nothing recorded here
+for it. If the user just saw that alert and asks why, say plainly that this
+command has nothing on it rather than showing an older, unrelated CLI finding.

@@ -38,7 +38,9 @@ SEVERITY_COLOURS = {"low": "2", "medium": "33", "high": "31"}
 #: happens to carry a time unit (`expected 1ms, got 2ms`), is as likely to be
 #: part of the diagnostic itself -- an assertion's expected or actual value,
 #: a count -- and erasing it can hide a genuinely different failure behind
-#: an identical-looking signature.
+#: an identical-looking signature. Paths fold the same way: only a known
+#: volatile location (a temp dir, unique per run) is noise; a source path
+#: like `/repo/a.py` is usually the diagnostic -- which file failed.
 _NOISE = (
     (re.compile(r"0x[0-9a-fA-F]+"), "0xX"),
     (
@@ -48,7 +50,7 @@ _NOISE = (
         ),
         "after N",
     ),
-    (re.compile(r"/[^\s:]+"), "PATH"),
+    (re.compile(r"/(?:tmp|private/tmp|var/tmp|var/folders)/[^\s:]*"), "PATH"),
     (re.compile(r"\s+"), " "),
 )
 
@@ -104,24 +106,34 @@ def signature(tool_name: str, call_input: object, content: object) -> str:
     return f"{tool_name}|{_normalise_call(call_input, 200)}|{_normalise(text, 500)}"
 
 
-def is_truncated(transcript: Path) -> bool:
-    """Whether the tail read could have cut off attempts older than the window."""
-    try:
-        return transcript.stat().st_size > TAIL_BYTES
-    except OSError:
-        return False
-
+#: A bounded second look when the fast tail window is ambiguous about whether
+#: it cut off history (see `main`). Generous enough to resolve the common
+#: case -- a long conversation with a sizeable but ordinary preamble -- while
+#: still bounded: the hook has a five-second budget, and an unconditional
+#: whole-file read is itself the failure mode a huge transcript would hit.
+MAX_RESOLVE_BYTES = 8 * 1024 * 1024
 
 _UNSET = object()
 
 
-def read_attempts(
-    transcript: Path, *, tail_bytes: int | None | object = _UNSET
-) -> list[tuple[str, bool, str]]:
-    """Every tool result in the transcript, oldest first, as (signature, failed,
-    tool). Reads only the tail (`tail_bytes`, default `TAIL_BYTES`) unless
-    `tail_bytes=None`, which reads the whole file -- the fallback used to
-    settle an ambiguous truncated boundary.
+def is_cut_short(transcript: Path, window: int) -> bool:
+    """Whether a read bounded to `window` bytes could have missed history."""
+    try:
+        return transcript.stat().st_size > window
+    except OSError:
+        return False
+
+
+def is_truncated(transcript: Path) -> bool:
+    """Whether the tail read could have cut off attempts older than the window."""
+    return is_cut_short(transcript, TAIL_BYTES)
+
+
+def read_attempts(transcript: Path, *, tail_bytes: int = _UNSET) -> list[tuple[str, bool, str]]:
+    """Every tool result in the transcript tail, oldest first, as (signature,
+    failed, tool). `tail_bytes` (default `TAIL_BYTES`) bounds how much of the
+    file is read; pass `MAX_RESOLVE_BYTES` for the wider, still-bounded second
+    look `main` uses to settle an ambiguous truncated boundary.
 
     Calls issued together in one message -- a parallel batch, not a retry --
     get one shared result message. The agent never saw one fail before
@@ -132,9 +144,8 @@ def read_attempts(
         tail_bytes = TAIL_BYTES
     try:
         with transcript.open("rb") as stream:
-            if tail_bytes is not None:
-                stream.seek(0, os.SEEK_END)
-                stream.seek(max(0, stream.tell() - tail_bytes))
+            stream.seek(0, os.SEEK_END)
+            stream.seek(max(0, stream.tell() - tail_bytes))
             raw = stream.read().decode("utf-8", "replace")
     except OSError:
         return []
@@ -263,23 +274,26 @@ def main() -> int:
     # outside it -- might have more identical failures before it that the read
     # never saw, but might just as easily be preceded by ordinary transcript
     # content the tail never needed to look past. A big file alone doesn't
-    # tell us which, so settle it once with a full read rather than guessing:
-    # a fixed tail is an optimisation for the common case, not a correctness
-    # boundary.
+    # tell us which, so settle it with one wider, still-bounded look rather
+    # than guessing: a fixed tail is an optimisation for the common case, not
+    # a correctness boundary -- but neither is reading an unbounded file.
     boundary = len(attempts) - found[0]
     preceding = attempts[boundary - 1] if boundary > 0 else None
     if is_truncated(path) and (preceding is None or preceding[2] == "?"):
-        attempts = read_attempts(path, tail_bytes=None)
+        attempts = read_attempts(path, tail_bytes=MAX_RESOLVE_BYTES)
         found = streak(attempts)
         if found is None or found[0] != STALL_THRESHOLD:
             return 0
         boundary = len(attempts) - found[0]
         preceding = attempts[boundary - 1] if boundary > 0 else None
-        # Even the full file can start mid-conversation if Claude Code's own
-        # compaction trimmed it, which looks exactly like an orphan. That's
-        # still real ambiguity; a clean boundary (or the genuine start of the
-        # transcript) is not.
+        # Still ambiguous if: an orphan sits right before the streak even in
+        # this wider window (real history, or Claude Code's own compaction,
+        # either way unknowable); or the streak still touches the window's
+        # edge and the file is bigger than even this wider window, so more of
+        # it could still be hiding beyond what we were willing to read.
         if preceding is not None and preceding[2] == "?":
+            return 0
+        if preceding is None and is_cut_short(path, MAX_RESOLVE_BYTES):
             return 0
 
     finding = finding_for(*found)

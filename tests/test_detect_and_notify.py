@@ -84,6 +84,16 @@ class SignatureTests(unittest.TestCase):
             detector.signature("Bash", call, "expected 2ms, got 3ms"),
         )
 
+    def test_changing_source_paths_are_not_one_streak(self) -> None:
+        """A source path like `/repo/a.py` is usually the diagnostic itself --
+        which file failed -- not a volatile detail; only a known temp
+        location folds."""
+        call = {"command": "pytest"}
+        self.assertNotEqual(
+            detector.signature("Bash", call, "FAILED /repo/a.py"),
+            detector.signature("Bash", call, "FAILED /repo/b.py"),
+        )
+
     def test_different_tools_are_different_failures(self) -> None:
         self.assertNotEqual(
             detector.signature("Bash", {}, "boom"), detector.signature("Edit", {}, "boom")
@@ -254,9 +264,11 @@ class StreakTests(unittest.TestCase):
 class TruncationTests(unittest.TestCase):
     def setUp(self) -> None:
         self._tail_bytes = detector.TAIL_BYTES
+        self._max_resolve_bytes = detector.MAX_RESOLVE_BYTES
 
     def tearDown(self) -> None:
         detector.TAIL_BYTES = self._tail_bytes
+        detector.MAX_RESOLVE_BYTES = self._max_resolve_bytes
 
     def test_untruncated_file_is_not_truncated(self) -> None:
         path = transcript(("a", "Bash", True))
@@ -546,19 +558,89 @@ class TruncationTests(unittest.TestCase):
         file_size = path.stat().st_size
 
         # The file itself (not our windowing) starts mid-conversation, at call
-        # 2's tool_result -- a full read finds this same orphan immediately
-        # before the streak. First confirm that directly:
-        full_attempts = detector.read_attempts(path, tail_bytes=None)
-        self.assertEqual(len(full_attempts), 4)
-        self.assertEqual(full_attempts[0][2], "?")
-        self.assertEqual(detector.streak(full_attempts), (3, "Bash"))
+        # 2's tool_result -- the fallback's wider read finds this same orphan
+        # immediately before the streak. First confirm that directly:
+        wide_attempts = detector.read_attempts(path, tail_bytes=detector.MAX_RESOLVE_BYTES)
+        self.assertEqual(len(wide_attempts), 4)
+        self.assertEqual(wide_attempts[0][2], "?")
+        self.assertEqual(detector.streak(wide_attempts), (3, "Bash"))
 
         # Now force the fast path into the ambiguous branch with an ordinary
-        # tail window smaller than the file; the fallback's own full read
+        # tail window smaller than the file; the fallback's own wider read
         # must reach the same conclusion and stay silent, not fire just
         # because the fast window's edge looked clean.
         detector.TAIL_BYTES = file_size - 5
         self.assertTrue(detector.is_truncated(path))
+
+        import io
+
+        stdin, stdout = sys.stdin, sys.stdout
+        sys.stdin = io.StringIO(
+            json.dumps({"hook_event_name": "PostToolUseFailure", "transcript_path": str(path)})
+        )
+        sys.stdout = io.StringIO()
+        try:
+            detector.main()
+            output = sys.stdout.getvalue()
+        finally:
+            sys.stdin, sys.stdout = stdin, stdout
+
+        self.assertEqual(output, "")
+
+    def test_fallback_stays_bounded_and_suppresses_past_its_own_cap(self) -> None:
+        """The wider second look must not become the same unbounded read it
+        replaced: a preamble bigger than even MAX_RESOLVE_BYTES must still
+        leave the boundary unresolved, and unresolved must mean silent, not
+        an ever-larger read."""
+        detector.TAIL_BYTES = 500
+        detector.MAX_RESOLVE_BYTES = 3000
+        preamble = json.dumps(
+            {"type": "assistant", "message": {"content": [{"type": "text", "text": "X" * 5000}]}}
+        )
+        lines = [preamble]
+        for n in range(3):
+            call_id = str(n)
+            lines.append(
+                json.dumps(
+                    {
+                        "type": "assistant",
+                        "message": {
+                            "content": [
+                                {
+                                    "type": "tool_use",
+                                    "id": call_id,
+                                    "name": "Bash",
+                                    "input": {"command": "pytest"},
+                                }
+                            ]
+                        },
+                    }
+                )
+            )
+            lines.append(
+                json.dumps(
+                    {
+                        "type": "user",
+                        "message": {
+                            "content": [
+                                {
+                                    "type": "tool_result",
+                                    "tool_use_id": call_id,
+                                    "is_error": "True",
+                                    "content": "Exit code 1",
+                                }
+                            ]
+                        },
+                    }
+                )
+            )
+        handle = tempfile.NamedTemporaryFile("w", suffix=".jsonl", delete=False)
+        handle.write("\n".join(lines) + "\n")
+        handle.close()
+        path = Path(handle.name)
+
+        self.assertTrue(detector.is_truncated(path))
+        self.assertTrue(detector.is_cut_short(path, detector.MAX_RESOLVE_BYTES))
 
         import io
 
