@@ -41,10 +41,39 @@ The available workflows are:
 /stacktrace:configure
 /stacktrace:status
 /stacktrace:findings
+/stacktrace:slack
 ```
 
 Background monitors are currently a Claude Code experimental component and run
 only in interactive CLI sessions where the Monitor tool is available.
+
+## Optional Slack connection
+
+`/stacktrace:slack connect`, `status`, `test`, and `disconnect` use the shared
+`stacktrace-slack` adapter. The existing native session monitor keeps working
+without Slack. A synthetic test is sent only when requested.
+
+The adapter is supplied by
+[stacktrace-slack-app](https://github.com/stacktrace-ai/stacktrace-slack-app),
+not a published package yet. After its reviewed implementation merges, install
+from a checked-out copy with `uv tool install /path/to/stacktrace-slack-app`.
+Reviewers can use the implementation branch explicitly; do not assume its
+current `main` already includes the adapter. Set `STACKTRACE_SLACK_URL` to the
+configured HTTPS service origin before starting Claude, or supply the origin
+when invoking the workflow. Bring the stable opaque project ID from Stacktrace
+and a safe project label when connecting; do not use a local filesystem path.
+
+The workflow opens Slack OAuth and asks the user to confirm the pairing code,
+device/project, and subscription in Slack. No copied tokens or recipient IDs
+are required. Credentials stay in the adapter's private local state. Admin
+restrictions may keep a connection pending or blocked.
+
+This addition implements connection management. Automatic finding publishing
+still requires the shared core/daemon to call the adapter with sanitized,
+eligible canonical findings and stable event/session IDs, then flush its
+durable queue on startup and periodically. This plugin's native monitor feed
+is not a Slack publish API; do not reconstruct findings from its notification
+text or upload transcripts. `accepted`, `delivered`, and `read` remain distinct.
 
 ## Development
 
