@@ -213,10 +213,12 @@ a push — the monitor-to-Claude handoff is best effort, as above. Phone
 delivery additionally depends on Remote Control and Anthropic-hosted push
 infrastructure.
 
-For findings that indicate Claude or its provider is unavailable, the daemon
-cannot rely on Claude to call `PushNotification`. Those findings require a
-model-independent local notification Adapter. The first implementation may be
-platform-specific; the event and policy interfaces remain shared.
+For findings that indicate Claude or its provider is unavailable, or that are
+produced after the session's last monitor subscriber has disconnected, the
+daemon cannot rely on Claude to call `PushNotification`. Those findings
+require a model-independent local notification Adapter. The first
+implementation may be platform-specific; the event and policy interfaces
+remain shared.
 
 ### No turn-level Stop hook is needed for detection
 
@@ -236,6 +238,11 @@ rather than exiting on a fixed clock that starts the moment the subscriber
 disconnects. A short grace period is a minimum bound on that wait, not a
 substitute for observing quiescence: each new append seen while draining
 extends the wait.
+
+A finding produced during this drain has no live monitor subscriber to
+deliver through. Waiting on the improbable chance that the user resumes that
+exact session ID is not a delivery path, so the daemon routes such a finding
+through the model-independent notification Adapter described above instead.
 
 Future enforcement may use synchronous lifecycle hooks, but enforcement is a
 separate Adapter and does not move detection into the plugin.
@@ -346,6 +353,7 @@ manager or a separate supervisor.
 | Notification is redelivered | Reuse the same `event_id`; never create a second finding. |
 | Claude ignores the monitor event | Finding remains visible through Stacktrace; native push is best effort. |
 | Claude or model provider is unavailable | Use the model-independent local notification Adapter for eligible availability findings. |
+| A notification-worthy finding is produced during the post-disconnect final drain | No live monitor subscriber exists to deliver it; route it through the model-independent notification Adapter rather than holding it for an improbable resume of that exact session ID. |
 | Socket path exists but no daemon responds | Verify ownership and liveness before removing the stale socket. |
 | Protocol versions are incompatible | Fail closed with a concise upgrade instruction on stderr. |
 | Host Claude Code version lacks the monitor declaration, `CLAUDE_CODE_SESSION_ID`, or `PushNotification` | `/stacktrace:configure` fails closed with an actionable upgrade message instead of reporting success. |
