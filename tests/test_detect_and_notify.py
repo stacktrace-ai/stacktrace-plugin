@@ -74,6 +74,16 @@ class SignatureTests(unittest.TestCase):
             detector.signature("Bash", call, "AssertionError: expected 2, got 3"),
         )
 
+    def test_changing_values_sharing_a_time_unit_are_not_one_streak(self) -> None:
+        """A value that happens to carry a time-unit suffix (`1ms`) can still
+        be the diagnostic itself; only a recognised timing phrase (`after
+        1.2s`) is volatile, not any number next to a unit-like word."""
+        call = {"command": "pytest"}
+        self.assertNotEqual(
+            detector.signature("Bash", call, "expected 1ms, got 2ms"),
+            detector.signature("Bash", call, "expected 2ms, got 3ms"),
+        )
+
     def test_different_tools_are_different_failures(self) -> None:
         self.assertNotEqual(
             detector.signature("Bash", {}, "boom"), detector.signature("Edit", {}, "boom")
@@ -150,6 +160,95 @@ class StreakTests(unittest.TestCase):
         handle.close()
 
         self.assertEqual(detector.read_attempts(Path(handle.name)), [])
+
+    def test_a_parallel_batch_is_one_occasion_not_several(self) -> None:
+        """Three tool_use blocks issued together in one message, failing
+        identically in one shared result message, is one occasion -- the
+        agent had no chance to see any of them fail before issuing the
+        others, so it isn't a retry loop of three."""
+        handle = tempfile.NamedTemporaryFile("w", suffix=".jsonl", delete=False)
+        handle.write(
+            json.dumps(
+                {
+                    "type": "assistant",
+                    "message": {
+                        "content": [
+                            {"type": "tool_use", "id": cid, "name": "Bash", "input": {"command": "pytest"}}
+                            for cid in ("a", "b", "c")
+                        ]
+                    },
+                }
+            )
+            + "\n"
+        )
+        handle.write(
+            json.dumps(
+                {
+                    "type": "user",
+                    "message": {
+                        "content": [
+                            {
+                                "type": "tool_result",
+                                "tool_use_id": cid,
+                                "is_error": "True",
+                                "content": "Exit code 1",
+                            }
+                            for cid in ("a", "b", "c")
+                        ]
+                    },
+                }
+            )
+            + "\n"
+        )
+        handle.close()
+
+        attempts = detector.read_attempts(Path(handle.name))
+        self.assertEqual(len(attempts), 1)
+
+    def test_sequential_batches_still_reach_the_threshold(self) -> None:
+        """Collapsing a batch to one occasion must not stop three genuinely
+        sequential occasions -- each itself a batch -- from being counted."""
+
+        def batch_lines(n: int) -> list[str]:
+            ids = [f"{n}-{i}" for i in range(2)]
+            lines = [
+                json.dumps(
+                    {
+                        "type": "assistant",
+                        "message": {
+                            "content": [
+                                {"type": "tool_use", "id": cid, "name": "Bash", "input": {"command": "pytest"}}
+                                for cid in ids
+                            ]
+                        },
+                    }
+                ),
+                json.dumps(
+                    {
+                        "type": "user",
+                        "message": {
+                            "content": [
+                                {
+                                    "type": "tool_result",
+                                    "tool_use_id": cid,
+                                    "is_error": "True",
+                                    "content": "Exit code 1",
+                                }
+                                for cid in ids
+                            ]
+                        },
+                    }
+                ),
+            ]
+            return lines
+
+        lines = [line for n in range(3) for line in batch_lines(n)]
+        handle = tempfile.NamedTemporaryFile("w", suffix=".jsonl", delete=False)
+        handle.write("\n".join(lines) + "\n")
+        handle.close()
+
+        attempts = detector.read_attempts(Path(handle.name))
+        self.assertEqual(detector.streak(attempts), (3, "Bash"))
 
 
 class TruncationTests(unittest.TestCase):
@@ -301,6 +400,164 @@ class TruncationTests(unittest.TestCase):
         self.assertEqual(len(attempts), 4)
         self.assertEqual(attempts[0][2], "?")
         self.assertEqual(detector.streak(attempts), (3, "Bash"))
+        self.assertTrue(detector.is_truncated(path))
+
+        import io
+
+        stdin, stdout = sys.stdin, sys.stdout
+        sys.stdin = io.StringIO(
+            json.dumps({"hook_event_name": "PostToolUseFailure", "transcript_path": str(path)})
+        )
+        sys.stdout = io.StringIO()
+        try:
+            detector.main()
+            output = sys.stdout.getvalue()
+        finally:
+            sys.stdin, sys.stdout = stdin, stdout
+
+        self.assertEqual(output, "")
+
+    def test_a_legitimate_streak_past_unrelated_preamble_still_fires(self) -> None:
+        """A big file alone doesn't mean the streak's own history was cut off:
+        a huge non-tool preamble can push the file past TAIL_BYTES while the
+        streak that follows it is complete and untouched. The fast tail read
+        can't tell the difference from real truncation, but a full read can
+        -- and must not stay silent on a real finding just because the file
+        happened to be long before it."""
+        detector.TAIL_BYTES = 2000
+        preamble = json.dumps(
+            {"type": "assistant", "message": {"content": [{"type": "text", "text": "X" * 3000}]}}
+        )
+        lines = [preamble]
+        for n in range(3):
+            call_id = str(n)
+            lines.append(
+                json.dumps(
+                    {
+                        "type": "assistant",
+                        "message": {
+                            "content": [
+                                {
+                                    "type": "tool_use",
+                                    "id": call_id,
+                                    "name": "Bash",
+                                    "input": {"command": "pytest"},
+                                }
+                            ]
+                        },
+                    }
+                )
+            )
+            lines.append(
+                json.dumps(
+                    {
+                        "type": "user",
+                        "message": {
+                            "content": [
+                                {
+                                    "type": "tool_result",
+                                    "tool_use_id": call_id,
+                                    "is_error": "True",
+                                    "content": "Exit code 1",
+                                }
+                            ]
+                        },
+                    }
+                )
+            )
+        handle = tempfile.NamedTemporaryFile("w", suffix=".jsonl", delete=False)
+        handle.write("\n".join(lines) + "\n")
+        handle.close()
+        path = Path(handle.name)
+
+        self.assertTrue(detector.is_truncated(path))
+        # The fast tail window alone would call this ambiguous:
+        fast_attempts = detector.read_attempts(path)
+        self.assertEqual(detector.streak(fast_attempts), (3, "Bash"))
+        self.assertEqual(len(fast_attempts), 3)
+
+        import io
+
+        stdin, stdout = sys.stdin, sys.stdout
+        sys.stdin = io.StringIO(
+            json.dumps({"hook_event_name": "PostToolUseFailure", "transcript_path": str(path)})
+        )
+        sys.stdout = io.StringIO()
+        try:
+            detector.main()
+            output = sys.stdout.getvalue()
+        finally:
+            sys.stdin, sys.stdout = stdin, stdout
+
+        self.assertIn("stacktrace-progress-stall", output)
+
+    def test_full_read_still_suppresses_a_genuinely_ambiguous_boundary(self) -> None:
+        """The fallback must not just always fire: if the full file shows an
+        orphan (or Claude Code's own compaction already trimmed the file)
+        right before the streak, it's still genuinely unknown and must stay
+        silent."""
+        big = "X" * 900
+        lines: list[str] = []
+        result_line_offsets: list[int] = []
+        for n in range(6):
+            call_id = str(n)
+            lines.append(
+                json.dumps(
+                    {
+                        "type": "assistant",
+                        "message": {
+                            "content": [
+                                {
+                                    "type": "tool_use",
+                                    "id": call_id,
+                                    "name": "Bash",
+                                    "input": {"command": "pytest"},
+                                }
+                            ]
+                        },
+                    }
+                )
+            )
+            result_line_offsets.append(sum(len(line) + 1 for line in lines))
+            lines.append(
+                json.dumps(
+                    {
+                        "type": "user",
+                        "message": {
+                            "content": [
+                                {
+                                    "type": "tool_result",
+                                    "tool_use_id": call_id,
+                                    "is_error": "True",
+                                    "content": "Exit code 1\n" + big,
+                                }
+                            ]
+                        },
+                    }
+                )
+            )
+        # Simulate compaction: the file on disk itself starts mid-conversation,
+        # at call 2's tool_result, with no tail-window trickery involved.
+        full_text = "\n".join(lines) + "\n"
+        handle = tempfile.NamedTemporaryFile("w", suffix=".jsonl", delete=False)
+        handle.write(full_text[result_line_offsets[2] :])
+        handle.close()
+        path = Path(handle.name)
+        file_size = path.stat().st_size
+
+        # The file itself (not our windowing) starts mid-conversation, at call
+        # 2's tool_result -- a full read finds this same orphan immediately
+        # before the streak. First confirm that directly:
+        full_attempts = detector.read_attempts(path, tail_bytes=None)
+        self.assertEqual(len(full_attempts), 4)
+        self.assertEqual(full_attempts[0][2], "?")
+        self.assertEqual(detector.streak(full_attempts), (3, "Bash"))
+
+        # Now force the fast path into the ambiguous branch with an ordinary
+        # tail window smaller than the file; the fallback's own full read
+        # must reach the same conclusion and stay silent, not fire just
+        # because the fast window's edge looked clean.
+        detector.TAIL_BYTES = file_size - 5
         self.assertTrue(detector.is_truncated(path))
 
         import io

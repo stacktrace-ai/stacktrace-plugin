@@ -33,16 +33,20 @@ SEVERITY_COLOURS = {"low": "2", "medium": "33", "high": "31"}
 #: Volatile substrings that make two runs of the same *error* look different.
 #: Applied to the failure output only -- a call's own arguments (paths,
 #: line numbers, ports) are exactly what tells two different calls apart, so
-#: they must survive normalisation intact. Numbers are normalised only where
-#: they're demonstrably volatile (a duration like `1.2s`); a bare number is
-#: as likely to be part of the diagnostic itself -- an assertion's expected
-#: or actual value, a count -- and erasing it can hide a genuinely different
-#: failure behind an identical-looking signature.
+#: they must survive normalisation intact. Numbers are normalised only in a
+#: recognised timing phrase (`after 1.2s`); a bare number, even one that
+#: happens to carry a time unit (`expected 1ms, got 2ms`), is as likely to be
+#: part of the diagnostic itself -- an assertion's expected or actual value,
+#: a count -- and erasing it can hide a genuinely different failure behind
+#: an identical-looking signature.
 _NOISE = (
     (re.compile(r"0x[0-9a-fA-F]+"), "0xX"),
     (
-        re.compile(r"\d+(?:\.\d+)?\s*(?:ms|s|secs?|seconds?|mins?|minutes?|hours?|h)\b", re.IGNORECASE),
-        "N",
+        re.compile(
+            r"\bafter\s+\d+(?:\.\d+)?\s*(?:ms|s|secs?|seconds?|mins?|minutes?|hours?|h)\b",
+            re.IGNORECASE,
+        ),
+        "after N",
     ),
     (re.compile(r"/[^\s:]+"), "PATH"),
     (re.compile(r"\s+"), " "),
@@ -108,12 +112,29 @@ def is_truncated(transcript: Path) -> bool:
         return False
 
 
-def read_attempts(transcript: Path) -> list[tuple[str, bool, str]]:
-    """Every tool result in the transcript tail, oldest first, as (signature, failed, tool)."""
+_UNSET = object()
+
+
+def read_attempts(
+    transcript: Path, *, tail_bytes: int | None | object = _UNSET
+) -> list[tuple[str, bool, str]]:
+    """Every tool result in the transcript, oldest first, as (signature, failed,
+    tool). Reads only the tail (`tail_bytes`, default `TAIL_BYTES`) unless
+    `tail_bytes=None`, which reads the whole file -- the fallback used to
+    settle an ambiguous truncated boundary.
+
+    Calls issued together in one message -- a parallel batch, not a retry --
+    get one shared result message. The agent never saw one fail before
+    issuing the next, so identical failures within that single message are
+    one occasion, not several: only the first survives per message.
+    """
+    if tail_bytes is _UNSET:
+        tail_bytes = TAIL_BYTES
     try:
         with transcript.open("rb") as stream:
-            stream.seek(0, os.SEEK_END)
-            stream.seek(max(0, stream.tell() - TAIL_BYTES))
+            if tail_bytes is not None:
+                stream.seek(0, os.SEEK_END)
+                stream.seek(max(0, stream.tell() - tail_bytes))
             raw = stream.read().decode("utf-8", "replace")
     except OSError:
         return []
@@ -133,6 +154,7 @@ def read_attempts(transcript: Path) -> list[tuple[str, bool, str]]:
         blocks = message.get("content")
         if not isinstance(blocks, list):
             continue
+        seen_this_message: set[str] = set()
         for block in blocks:
             if not isinstance(block, dict):
                 continue
@@ -142,7 +164,11 @@ def read_attempts(transcript: Path) -> list[tuple[str, bool, str]]:
                 tool, call_input = calls.get(str(block.get("tool_use_id")), ("?", None))
                 # is_error arrives as a bool or as the string "True".
                 failed = str(block.get("is_error", "")).lower() == "true"
-                results.append((signature(tool, call_input, block.get("content")), failed, tool))
+                sig = signature(tool, call_input, block.get("content"))
+                if sig in seen_this_message:
+                    continue
+                seen_this_message.add(sig)
+                results.append((sig, failed, tool))
     return results
 
 
@@ -234,15 +260,27 @@ def main() -> int:
         return 0
     # A truncated tail whose streak runs all the way to the edge of the window
     # -- or is immediately preceded by an orphan result whose own tool_use fell
-    # outside it -- may have more identical failures before it that the read
-    # never saw. Either way the boundary isn't clean, so the true count could
-    # be anything at or past the threshold; treating this as the one, exact
-    # crossing of it would risk re-firing on every later failure instead of
-    # the one time the design promises.
+    # outside it -- might have more identical failures before it that the read
+    # never saw, but might just as easily be preceded by ordinary transcript
+    # content the tail never needed to look past. A big file alone doesn't
+    # tell us which, so settle it once with a full read rather than guessing:
+    # a fixed tail is an optimisation for the common case, not a correctness
+    # boundary.
     boundary = len(attempts) - found[0]
     preceding = attempts[boundary - 1] if boundary > 0 else None
     if is_truncated(path) and (preceding is None or preceding[2] == "?"):
-        return 0
+        attempts = read_attempts(path, tail_bytes=None)
+        found = streak(attempts)
+        if found is None or found[0] != STALL_THRESHOLD:
+            return 0
+        boundary = len(attempts) - found[0]
+        preceding = attempts[boundary - 1] if boundary > 0 else None
+        # Even the full file can start mid-conversation if Claude Code's own
+        # compaction trimmed it, which looks exactly like an orphan. That's
+        # still real ambiguity; a clean boundary (or the genuine start of the
+        # transcript) is not.
+        if preceding is not None and preceding[2] == "?":
+            return 0
 
     finding = finding_for(*found)
     print(
