@@ -225,8 +225,15 @@ provides the correct lifecycle.
 
 A SessionEnd hook is also unnecessary for routine detection. When the monitor
 disconnects, the daemon performs a final drain of the session log and retains
-any undelivered findings. The daemon must remain alive for a short grace period
-after the final subscriber disconnects so the host can flush its last records.
+any undelivered findings. Disconnection ends the subscription, not the drain:
+it is not an end-of-file signal, and the host may still flush final records
+after it. The daemon must keep watching the transcript after the final
+subscriber disconnects until it observes the transcript go quiescent — no new
+appended bytes for a debounce interval, or the host process itself exiting —
+rather than exiting on a fixed clock that starts the moment the subscriber
+disconnects. A short grace period is a minimum bound on that wait, not a
+substitute for observing quiescence: each new append seen while draining
+extends the wait.
 
 Future enforcement may use synchronous lifecycle hooks, but enforcement is a
 separate Adapter and does not move detection into the plugin.
