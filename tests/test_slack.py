@@ -73,6 +73,18 @@ class SlackWorkflowTests(unittest.TestCase):
                 self.assertFalse(self.capture.exists())
                 self.assertNotIn("secret", response.stderr)
 
+    def test_rejects_path_shaped_labels(self):
+        for value in (
+            {"action": "connect", "project_id": "project1",
+             "project_label": "/home/alice/private-project"},
+            {"action": "connect", "project_id": "project1",
+             "project_label": "Demo", "device_label": "C:\\Users\\alice\\private-project"},
+        ):
+            with self.subTest(value=value):
+                response = self.run_workflow(value)
+                self.assertEqual(response.returncode, 2)
+                self.assertFalse(self.capture.exists())
+
     def test_missing_adapter_explains_optional_dependency(self):
         self.executable.unlink()
         response = self.run_workflow({"action": "status"})

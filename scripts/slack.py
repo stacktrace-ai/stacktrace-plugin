@@ -11,6 +11,7 @@ import sys
 from urllib.parse import urlsplit
 
 IDENTIFIER = re.compile(r"[A-Za-z0-9_-]{1,128}\Z")
+PATH_SHAPED = re.compile(r"\A(?:[A-Za-z]:[\\/]|\\\\|~[\\/]|/)")
 
 
 def arguments(request: dict) -> list[str]:
@@ -43,8 +44,10 @@ def arguments(request: dict) -> list[str]:
         for name in ("project_label", "device_label"):
             label = request.get(name, "My device" if name == "device_label" else None)
             if (not isinstance(label, str) or not label.strip() or len(label) > 80
-                    or any(ord(c) < 32 for c in label)):
-                raise ValueError("Connect requires short, printable project and device labels.")
+                    or any(ord(c) < 32 for c in label) or PATH_SHAPED.match(label)):
+                raise ValueError(
+                    "Connect requires short, printable project and device labels, not filesystem paths."
+                )
             result += ["--" + name.replace("_", "-"), label]
     elif any(name in request for name in ("project_id", "project_label", "device_label")):
         raise ValueError("Project and device fields apply only to connect.")
