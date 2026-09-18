@@ -12,6 +12,7 @@ not -- see ADR-0002.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -50,11 +51,21 @@ def use_colour(environ: dict[str, str]) -> bool:
     return environ.get("NO_COLOR") is None
 
 
+def _bounded(text: str, limit: int) -> str:
+    """Cap an identity fragment at `limit` chars. Slicing alone can collide two
+    different fragments that happen to share a prefix at least that long, so a
+    truncated fragment carries a hash of its untruncated self as a tie-breaker."""
+    if len(text) <= limit:
+        return text
+    digest = hashlib.sha256(text.encode("utf-8")).hexdigest()[:12]
+    return f"{text[:limit]}…{digest}"
+
+
 def _normalise(value: object, limit: int) -> str:
     text = value if isinstance(value, str) else json.dumps(value, sort_keys=True)
     for pattern, replacement in _NOISE:
         text = pattern.sub(replacement, text)
-    return text.strip().lower()[:limit]
+    return _bounded(text.strip().lower(), limit)
 
 
 def _normalise_call(value: object, limit: int) -> str:
@@ -63,20 +74,23 @@ def _normalise_call(value: object, limit: int) -> str:
     different call, which is the whole reason it's in the signature."""
     text = value if isinstance(value, str) else json.dumps(value, sort_keys=True)
     text = re.sub(r"\s+", " ", text)
-    return text.strip().lower()[:limit]
+    return _bounded(text.strip().lower(), limit)
 
 
 def signature(tool_name: str, call_input: object, content: object) -> str:
-    """Identity of one failing *call*, not of one error string.
+    """Identity of one failing *call with its diagnostic*, not of one error
+    string.
 
-    The call has to be in the key. A failed Bash result opens with `Exit code 1`,
+    The call has to be in the key: a failed Bash result opens with `Exit code 1`,
     so an error-only signature makes every failing command in a session look like
-    the same failure -- three unrelated ones would report as a stall.
+    the same failure -- three unrelated ones would report as a stall. The
+    diagnostic body has to be in the key too: the same call can fail for
+    different reasons behind the same status line, and only the body tells
+    those apart. Both sides are noise-stripped first so incidental volatility
+    -- a temp path, a timestamp, a line number -- doesn't split one real streak.
     """
     text = content if isinstance(content, str) else json.dumps(content, sort_keys=True)
-    stripped = text.strip()
-    first = stripped.splitlines()[0] if stripped else ""
-    return f"{tool_name}|{_normalise_call(call_input, 200)}|{_normalise(first, 160)}"
+    return f"{tool_name}|{_normalise_call(call_input, 200)}|{_normalise(text, 500)}"
 
 
 def is_truncated(transcript: Path) -> bool:

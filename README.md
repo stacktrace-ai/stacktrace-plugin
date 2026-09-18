@@ -41,7 +41,7 @@ the CLI and ask before enabling automatic sync.
 
 | Claude event | Stacktrace work |
 |---|---|
-| `Stop` | If the transcript changed, analyze and sync only the current Claude session. Then show any finding the CLI has queued for this session. |
+| `Stop` | If the transcript changed, analyze and sync only the current Claude session. |
 | `SessionEnd` | Make the final runtime pass, then sync endpoint composition only if its redacted payload changed. |
 
 Claude Code starts both hooks with `async: true`. A small launcher forwards only

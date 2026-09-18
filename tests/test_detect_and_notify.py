@@ -84,6 +84,30 @@ class SignatureTests(unittest.TestCase):
             detector.signature("Bash", {"command": "pytest /repo/b.py"}, "Exit code 1"),
         )
 
+    def test_different_diagnostics_sharing_a_status_line_are_not_one_streak(self) -> None:
+        """The same command failing for different reasons behind the same
+        generic status line must not look like the same failure."""
+        self.assertNotEqual(
+            detector.signature("Bash", {"command": "pytest"}, "Exit code 1\nAssertionError: test_foo failed"),
+            detector.signature("Bash", {"command": "pytest"}, "Exit code 1\nAssertionError: test_bar failed"),
+        )
+
+    def test_call_arguments_beyond_the_slice_limit_still_disambiguate(self) -> None:
+        """A long shared setup prefix must not let a truncated identity key
+        collide two calls that differ only after the truncation point."""
+        prefix = "FOO=1 BAR=2 " * 20
+        self.assertNotEqual(
+            detector.signature("Bash", {"command": prefix + "target-a"}, "Exit code 1"),
+            detector.signature("Bash", {"command": prefix + "target-b"}, "Exit code 1"),
+        )
+
+    def test_diagnostic_body_beyond_the_slice_limit_still_disambiguates(self) -> None:
+        shared_prefix = "Exit code 1\n" + "stack frame line\n" * 40
+        self.assertNotEqual(
+            detector.signature("Bash", {"command": "pytest"}, shared_prefix + "AssertionError: test_foo"),
+            detector.signature("Bash", {"command": "pytest"}, shared_prefix + "AssertionError: test_bar"),
+        )
+
 
 class StreakTests(unittest.TestCase):
     def test_streak_counts_only_the_trailing_identical_failures(self) -> None:
