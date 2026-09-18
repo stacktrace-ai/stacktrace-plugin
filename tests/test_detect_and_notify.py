@@ -92,6 +92,14 @@ class SignatureTests(unittest.TestCase):
             detector.signature("Bash", {"command": "pytest"}, "Exit code 1\nAssertionError: test_bar failed"),
         )
 
+    def test_call_case_and_whitespace_are_significant(self) -> None:
+        """A case-sensitive filename, or meaningful spacing inside quoted call
+        data, can be the only thing distinguishing two different calls."""
+        self.assertNotEqual(
+            detector.signature("Bash", {"command": "pytest Foo.py"}, "Exit code 1"),
+            detector.signature("Bash", {"command": "pytest foo.py"}, "Exit code 1"),
+        )
+
     def test_call_arguments_beyond_the_slice_limit_still_disambiguate(self) -> None:
         """A long shared setup prefix must not let a truncated identity key
         collide two calls that differ only after the truncation point."""
@@ -203,6 +211,85 @@ class TruncationTests(unittest.TestCase):
         detector.TAIL_BYTES = pair_len * 3 + 50  # room for exactly the last 3 pairs
 
         attempts = detector.read_attempts(path)
+        self.assertEqual(detector.streak(attempts), (3, "Bash"))
+        self.assertTrue(detector.is_truncated(path))
+
+        import io
+
+        stdin, stdout = sys.stdin, sys.stdout
+        sys.stdin = io.StringIO(
+            json.dumps({"hook_event_name": "PostToolUseFailure", "transcript_path": str(path)})
+        )
+        sys.stdout = io.StringIO()
+        try:
+            detector.main()
+            output = sys.stdout.getvalue()
+        finally:
+            sys.stdin, sys.stdout = stdin, stdout
+
+        self.assertEqual(output, "")
+
+    def test_truncated_orphan_before_the_streak_does_not_refire(self) -> None:
+        """The window can cut cleanly between a call's `tool_use` line and its
+        `tool_result` line, leaving an orphan ("?") result ahead of a real
+        3-streak. len(attempts) is then 4 while the streak is 3, so the old
+        touches-the-edge check missed this -- but the orphan is itself proof
+        the window's start isn't a clean boundary, so it must not refire
+        either."""
+        big = "X" * 900
+        lines: list[str] = []
+        result_line_offsets: list[int] = []
+        for n in range(6):
+            call_id = str(n)
+            lines.append(
+                json.dumps(
+                    {
+                        "type": "assistant",
+                        "message": {
+                            "content": [
+                                {
+                                    "type": "tool_use",
+                                    "id": call_id,
+                                    "name": "Bash",
+                                    "input": {"command": "pytest"},
+                                }
+                            ]
+                        },
+                    }
+                )
+            )
+            result_line_offsets.append(sum(len(line) + 1 for line in lines))
+            lines.append(
+                json.dumps(
+                    {
+                        "type": "user",
+                        "message": {
+                            "content": [
+                                {
+                                    "type": "tool_result",
+                                    "tool_use_id": call_id,
+                                    "is_error": "True",
+                                    "content": "Exit code 1\n" + big,
+                                }
+                            ]
+                        },
+                    }
+                )
+            )
+        handle = tempfile.NamedTemporaryFile("w", suffix=".jsonl", delete=False)
+        handle.write("\n".join(lines) + "\n")
+        handle.close()
+        path = Path(handle.name)
+
+        # Orphan call 2's tool_use: the window starts exactly at call 2's
+        # tool_result line, keeping it (as an unknown "?" attempt) plus the
+        # three complete, identical pairs (3, 4, 5) after it.
+        start_offset = result_line_offsets[2]
+        detector.TAIL_BYTES = path.stat().st_size - start_offset
+
+        attempts = detector.read_attempts(path)
+        self.assertEqual(len(attempts), 4)
+        self.assertEqual(attempts[0][2], "?")
         self.assertEqual(detector.streak(attempts), (3, "Bash"))
         self.assertTrue(detector.is_truncated(path))
 

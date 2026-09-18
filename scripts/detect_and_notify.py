@@ -69,12 +69,12 @@ def _normalise(value: object, limit: int) -> str:
 
 
 def _normalise_call(value: object, limit: int) -> str:
-    """Fold whitespace and case only. Unlike `_normalise`, this keeps paths and
-    numbers intact -- they're the part of a call that distinguishes it from a
-    different call, which is the whole reason it's in the signature."""
+    """Preserve the call's identity exactly -- case, whitespace, and all.
+    Unlike `_normalise`, nothing here is folded: a case-sensitive filename or
+    meaningful spacing inside quoted data can be the only thing distinguishing
+    two different calls, which is the whole reason the call is in the signature."""
     text = value if isinstance(value, str) else json.dumps(value, sort_keys=True)
-    text = re.sub(r"\s+", " ", text)
-    return _bounded(text.strip().lower(), limit)
+    return _bounded(text, limit)
 
 
 def signature(tool_name: str, call_input: object, content: object) -> str:
@@ -226,11 +226,15 @@ def main() -> int:
     if found is None or found[0] != STALL_THRESHOLD:
         return 0
     # A truncated tail whose streak runs all the way to the edge of the window
-    # may have more identical failures before it that the read never saw. The
-    # true count could be anything at or past the threshold, so treating this
-    # as the one, exact crossing of it would risk re-firing on every later
-    # failure instead of the one time the design promises.
-    if is_truncated(path) and found[0] == len(attempts):
+    # -- or is immediately preceded by an orphan result whose own tool_use fell
+    # outside it -- may have more identical failures before it that the read
+    # never saw. Either way the boundary isn't clean, so the true count could
+    # be anything at or past the threshold; treating this as the one, exact
+    # crossing of it would risk re-firing on every later failure instead of
+    # the one time the design promises.
+    boundary = len(attempts) - found[0]
+    preceding = attempts[boundary - 1] if boundary > 0 else None
+    if is_truncated(path) and (preceding is None or preceding[2] == "?"):
         return 0
 
     finding = finding_for(*found)
