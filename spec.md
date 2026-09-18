@@ -124,6 +124,13 @@ per-user daemon is running, connects, subscribes, and relays eligible events.
 It emits operational logs to stderr. Its stdout is reserved exclusively for
 events Claude should process.
 
+A single host commonly has many concurrent `session_id`s: one per active
+Claude session across terminals, repositories, and worktrees. The daemon is
+per-user, not per-session; it accepts one subscription per `session_id` and
+multiplexes all of them concurrently. Each monitor instance is independent
+and only ever receives events for the exact `session_id` it supplied when it
+subscribed.
+
 ### The subscription is a long-lived local stream
 
 On macOS and Linux, the monitor and daemon communicate over a Unix domain
@@ -145,10 +152,19 @@ is:
 ```
 
 The interface must support reconnecting after daemon or monitor failure.
-Findings and delivery state live in the daemon, not in the monitor. Delivery is
-at least once: the monitor acknowledges only after it has written and flushed
-the event to stdout. A crash between stdout delivery and acknowledgement may
-redeliver the same stable `event_id`.
+Findings and delivery state live in the daemon, not in the monitor.
+Daemon-to-monitor delivery is at least once: the monitor acknowledges an
+event to the daemon only after it has written and flushed the event to
+stdout, and a crash between that flush and the acknowledgement may redeliver
+the same stable `event_id`.
+
+Flushing stdout confirms only that the bytes entered the pipe the host reads
+from; it is not a receipt from Claude. The monitor cannot observe whether
+Claude actually consumed a flushed event before exiting or dropping the
+stream, so the handoff from monitor stdout to Claude is explicitly best
+effort, not a Claude-observable delivery guarantee. The at-least-once
+guarantee covers redelivery of an event across monitor and daemon restarts;
+it is not a proof that Claude processed the event.
 
 The transport should remain an implementation detail behind the subscription
 interface. A future Windows Adapter can use a named pipe, and an isolated
