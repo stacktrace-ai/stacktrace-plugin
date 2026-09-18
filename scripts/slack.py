@@ -8,11 +8,15 @@ import re
 import shutil
 import subprocess
 import sys
-import unicodedata
 from urllib.parse import urlsplit
 
 IDENTIFIER = re.compile(r"[A-Za-z0-9_-]{1,128}\Z")
-PATH_SHAPED = re.compile(r"\A(?:[A-Za-z]:|\\+|~|\.\.?[\\/]|/)")
+# Separator-free path forms that a bare "no slash or backslash" rule can't
+# catch: a Windows drive-relative reference (C:private) or a bare Unix home
+# shorthand (~ or ~alice). Anything with an actual "/" or "\" is rejected
+# directly in the label check below, which covers absolute, relative, UNC,
+# and home paths with a separator without needing to enumerate their forms.
+PATH_SHAPED = re.compile(r"\A(?:[A-Za-z]:|~)")
 
 
 def arguments(request: dict) -> list[str]:
@@ -51,9 +55,8 @@ def arguments(request: dict) -> list[str]:
             if not isinstance(label, str):
                 raise ValueError("Connect requires short, printable project and device labels.")
             label = label.strip()
-            if (not label or len(label) > 80
-                    or any(unicodedata.category(c).startswith("C") for c in label)
-                    or PATH_SHAPED.match(label)):
+            if (not label or len(label) > 80 or not label.isprintable()
+                    or "/" in label or "\\" in label or PATH_SHAPED.match(label)):
                 raise ValueError(
                     "Connect requires short, printable project and device labels, not filesystem paths."
                 )

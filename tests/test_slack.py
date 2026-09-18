@@ -39,20 +39,20 @@ class SlackWorkflowTests(unittest.TestCase):
         self.executable.chmod(0o700)
         self.environment = {**os.environ, "PATH": str(self.path), "CAPTURE": str(self.capture)}
 
-    def run_workflow(self, value):
+    def run_workflow(self, value, cwd=None):
         return subprocess.run(
             [sys.executable, str(ROOT / "scripts/slack.py")],
             input=json.dumps(value), text=True, capture_output=True,
-            env=self.environment, check=False,
+            env=self.environment, cwd=cwd, check=False,
         )
 
     def test_connect_passes_literal_labels_without_shell_expansion(self):
         marker = self.path / "should-not-exist"
-        label = "$(touch " + str(marker) + ")"
+        label = "$(touch should-not-exist)"
         response = self.run_workflow({
             "action": "connect", "service_url": "https://notify.example",
             "connection": "work", "project_id": "project1", "project_label": label,
-        })
+        }, cwd=self.path)
         self.assertEqual(response.returncode, 0, response.stderr)
         argv = json.loads(self.capture.read_text())
         self.assertIn(label, argv)
@@ -99,6 +99,10 @@ class SlackWorkflowTests(unittest.TestCase):
              "project_label": "C:private"},
             {"action": "connect", "project_id": "project1",
              "project_label": "~alice/private"},
+            {"action": "connect", "project_id": "project1",
+             "project_label": "clients/acme/private-project"},
+            {"action": "connect", "project_id": "project1",
+             "project_label": "~"},
         ):
             with self.subTest(value=value):
                 response = self.run_workflow(value)
@@ -106,7 +110,7 @@ class SlackWorkflowTests(unittest.TestCase):
                 self.assertFalse(self.capture.exists())
 
     def test_rejects_non_c0_control_characters_in_labels(self):
-        for label in ("Demo\x7f", "Demo‮DetupmoC"):
+        for label in ("Demo\x7f", "Demo‮DetupmoC", "Demo Line2", "Demo Line2"):
             with self.subTest(label=label):
                 response = self.run_workflow({
                     "action": "connect", "project_id": "project1", "project_label": label,
