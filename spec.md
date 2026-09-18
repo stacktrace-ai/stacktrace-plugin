@@ -207,9 +207,11 @@ This hook adds behavior guidance only. It does not watch logs, run detection,
 route findings, or wait for work.
 
 Claude's tool choice is model-mediated. The daemon's durable finding is the
-source of truth; successful monitor delivery means the event reached Claude,
-not that a device received a push. Phone delivery additionally depends on
-Remote Control and Anthropic-hosted push infrastructure.
+source of truth; successful monitor delivery means the event reached the
+monitor's stdout pipe, not that Claude consumed it or that a device received
+a push — the monitor-to-Claude handoff is best effort, as above. Phone
+delivery additionally depends on Remote Control and Anthropic-hosted push
+infrastructure.
 
 For findings that indicate Claude or its provider is unavailable, the daemon
 cannot rely on Claude to call `PushNotification`. Those findings require a
@@ -288,7 +290,9 @@ supervision logic.
 
 1. The user installs the Stacktrace plugin.
 2. `/stacktrace:configure` verifies or installs the compatible Stacktrace CLI,
-   creates local configuration, and verifies daemon startup.
+   creates local configuration, verifies daemon startup, and probes that the
+   host Claude Code version supports the monitor declaration,
+   `CLAUDE_CODE_SESSION_ID`, and `PushNotification`.
 3. The next Claude session automatically starts the plugin monitor.
 
 The MVP does not require Slack or Fleet configuration.
@@ -344,6 +348,7 @@ manager or a separate supervisor.
 | Claude or model provider is unavailable | Use the model-independent local notification Adapter for eligible availability findings. |
 | Socket path exists but no daemon responds | Verify ownership and liveness before removing the stale socket. |
 | Protocol versions are incompatible | Fail closed with a concise upgrade instruction on stderr. |
+| Host Claude Code version lacks the monitor declaration, `CLAUDE_CODE_SESSION_ID`, or `PushNotification` | `/stacktrace:configure` fails closed with an actionable upgrade message instead of reporting success. |
 
 ## Security and privacy
 
