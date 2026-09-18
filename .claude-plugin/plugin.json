@@ -7,7 +7,7 @@
     "url": "https://stacktrace.ai"
   },
   "homepage": "https://stacktrace.ai",
-  "repository": "https://github.com/stacktrace-ai/stacktrace-claude-plugin",
+  "repository": "https://github.com/stacktrace-ai/stacktrace-plugin",
   "keywords": [
     "agent-security",
     "runtime-detection",
