@@ -73,7 +73,8 @@ This is an instruction-level limit, not a platform-enforced quota.
 
 PR-open triggers do not backfill old PRs. First check existing runs and progress
 comments for a watcher to reuse. Otherwise start the repository's configured
-routine with the explicit PR URL as run context. If the run receives no target,
+routine with the explicit PR URL in the `text` field of run context; this was
+verified in the received fire payload. If the run receives no target,
 send the URL directly to that existing cloud session before it acts. The tested
 recovery path used `claude -p --cloud SESSION_ID` to supply the missing target.
 Do not launch a replacement with bare `claude --cloud`: those sessions lacked
