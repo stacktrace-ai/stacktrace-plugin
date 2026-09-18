@@ -1,0 +1,13 @@
+{
+  "name": "stacktrace",
+  "description": "Stacktrace Claude Code plugin marketplace.",
+  "owner": {
+    "name": "Stacktrace AI"
+  },
+  "plugins": [
+    {
+      "name": "stacktrace",
+      "source": "./"
+    }
+  ]
+}
