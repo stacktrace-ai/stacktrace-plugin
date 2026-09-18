@@ -33,10 +33,17 @@ SEVERITY_COLOURS = {"low": "2", "medium": "33", "high": "31"}
 #: Volatile substrings that make two runs of the same *error* look different.
 #: Applied to the failure output only -- a call's own arguments (paths,
 #: line numbers, ports) are exactly what tells two different calls apart, so
-#: they must survive normalisation intact.
+#: they must survive normalisation intact. Numbers are normalised only where
+#: they're demonstrably volatile (a duration like `1.2s`); a bare number is
+#: as likely to be part of the diagnostic itself -- an assertion's expected
+#: or actual value, a count -- and erasing it can hide a genuinely different
+#: failure behind an identical-looking signature.
 _NOISE = (
     (re.compile(r"0x[0-9a-fA-F]+"), "0xX"),
-    (re.compile(r"\d+(?:[.,:]\d+)*"), "N"),
+    (
+        re.compile(r"\d+(?:\.\d+)?\s*(?:ms|s|secs?|seconds?|mins?|minutes?|hours?|h)\b", re.IGNORECASE),
+        "N",
+    ),
     (re.compile(r"/[^\s:]+"), "PATH"),
     (re.compile(r"\s+"), " "),
 )

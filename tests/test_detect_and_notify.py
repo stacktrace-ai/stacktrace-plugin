@@ -64,6 +64,16 @@ class SignatureTests(unittest.TestCase):
 
         self.assertEqual(first, second)
 
+    def test_changing_assertion_values_are_not_one_streak(self) -> None:
+        """A bare number can be the diagnostic itself -- an assertion's
+        expected/actual value -- not volatile noise; erasing every digit
+        hides three genuinely different failures behind one signature."""
+        call = {"command": "pytest"}
+        self.assertNotEqual(
+            detector.signature("Bash", call, "AssertionError: expected 1, got 2"),
+            detector.signature("Bash", call, "AssertionError: expected 2, got 3"),
+        )
+
     def test_different_tools_are_different_failures(self) -> None:
         self.assertNotEqual(
             detector.signature("Bash", {}, "boom"), detector.signature("Edit", {}, "boom")
