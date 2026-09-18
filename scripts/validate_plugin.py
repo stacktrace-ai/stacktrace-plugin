@@ -51,7 +51,7 @@ def main() -> int:
     if monitors != [
         {
             "name": "stacktrace-alerts",
-            "command": "stacktrace daemon subscribe --host claude-code",
+            "command": "stacktrace daemon subscribe --agent-kind claude-code",
             "description": "High-severity Stacktrace findings for this Claude session",
         }
     ]:

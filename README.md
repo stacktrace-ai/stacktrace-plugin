@@ -32,7 +32,7 @@ CLI available.
 For each interactive Claude session, the plugin runs:
 
 ```text
-stacktrace daemon subscribe --host claude-code
+stacktrace daemon subscribe --agent-kind claude-code
 ```
 
 The command subscribes with Claude's native session ID and starts the per-user

@@ -116,7 +116,7 @@ same repository must not receive each other's findings.
 The intended command surface is deliberately small:
 
 ```text
-stacktrace daemon subscribe --host claude-code
+stacktrace daemon subscribe --agent-kind claude-code
 ```
 
 The command reads the session ID from the host environment, ensures the
@@ -271,8 +271,8 @@ Candidate user surfaces are:
 ```text
 stacktrace configure
 stacktrace daemon status
-stacktrace daemon subscribe --host claude-code
-stacktrace findings [--session <id>]
+stacktrace daemon subscribe --agent-kind claude-code
+stacktrace findings --agent-kind claude-code [--session <id>]
 ```
 
 Command names remain subject to CLI design review; the ownership split does
