@@ -1,10 +1,10 @@
 ---
 id: 0002
 title: Detect and surface a stall from the transcript
-status: accepted
+status: superseded
 date: 2026-09-17
 supersedes: null
-superseded-by: null
+superseded-by: 0003
 ---
 
 ## Context

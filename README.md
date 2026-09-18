@@ -47,10 +47,34 @@ The available workflows are:
 /stacktrace:status
 /stacktrace:findings
 /stacktrace:slack
+/stacktrace:detect
+/stacktrace:why
+/stacktrace:dismiss
+/stacktrace:mute
 ```
 
 Background monitors are currently a Claude Code experimental component and run
-only in interactive CLI sessions where the Monitor tool is available.
+only in interactive CLI sessions where the Monitor tool is available. Where they
+are not, the triage workflows below still work: they reach the CLI directly and
+do not depend on how a finding was delivered.
+
+## Finding triage
+
+- `/stacktrace:detect` — run local detection over a time window without
+  enabling upload.
+- `/stacktrace:why` — show the evidence behind the last finding, coverage
+  included.
+- `/stacktrace:dismiss` — record that one finding was not worth surfacing.
+- `/stacktrace:mute` — stop a rule in this project, without silencing the rest.
+
+`dismiss` and `mute` are deliberately different actions. Dismissing judges one
+finding and leaves the rule running; muting changes what reaches you and leaves
+findings already surfaced in place, so a mute never quietly rewrites the record
+a rule's dismissal rate is computed from.
+
+Severity and confidence are reported as separate grades throughout: severity is
+how much a finding matters, confidence is how sure the detector is that it
+happened. Coverage — what the detector could not see — is part of the claim.
 
 ## Optional Slack connection
 
@@ -110,7 +134,13 @@ Validate the repository contract and tests:
 python3 scripts/validate_plugin.py
 python3 -m unittest discover -s tests -v
 claude plugin validate .
+bash scripts/install-hooks.sh
 ```
+
+`install-hooks.sh` points `core.hooksPath` at `scripts/git-hooks`, so a push
+runs the validator and the tests first. Architecture decisions are recorded in
+[`docs/adrs`](docs/adrs/INDEX.md); the delivery path is
+[ADR-0003](docs/adrs/0003-deliver-findings-through-a-session-monitor.md).
 
 The manifest intentionally omits an explicit version while the plugin is under
 active development, so Claude derives updates from the source commit. Current

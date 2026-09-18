@@ -22,8 +22,3 @@ rule silenced, offer the `mute` skill rather than dismissing repeatedly.
 
 Report what the command returns. It records locally; the CLI decides whether a
 dismissal is ever uploaded.
-
-`stacktrace-progress-stall` is the exception: it's detected locally by a
-stateless hook that never reaches the CLI, so there is nothing here to
-dismiss. If the user just saw that alert, say so rather than dismissing an
-older, unrelated CLI finding in its place.

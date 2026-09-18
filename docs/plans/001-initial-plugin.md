@@ -5,6 +5,12 @@ composition sync runs automatically without blocking the agent.
 
 **Decision:** [ADR-0001](../adrs/0001-detach-a-metadata-only-cli-worker.md).
 
+**Status:** delivered, then superseded. The lifecycle-hook sync this plan
+built was replaced by the session monitor in
+[ADR-0003](../adrs/0003-deliver-findings-through-a-session-monitor.md). The
+criteria below record what was true when PR #1 shipped; the `Stop` and
+`SessionEnd` hooks they describe no longer exist.
+
 ## Success criteria
 
 - [x] Installing the plugin neither configures credentials nor enables upload.

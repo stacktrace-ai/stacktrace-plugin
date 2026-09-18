@@ -1,10 +1,10 @@
 ---
 id: 0001
 title: Detach a metadata-only CLI worker
-status: accepted
+status: superseded
 date: 2026-09-16
 supersedes: null
-superseded-by: null
+superseded-by: 0003
 ---
 
 ## Context

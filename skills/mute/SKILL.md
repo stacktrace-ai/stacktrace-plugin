@@ -23,8 +23,5 @@ Muting is a configuration change, not a judgement on one finding:
 - other rules keep firing — it is not `pause`;
 - the CLI still records a muted rule's firings, so the operator can see what
   they stopped seeing.
-- `stacktrace-progress-stall` is the exception: it's detected locally by a
-  stateless hook that never consults the CLI, so muting it here doesn't stop
-  it firing. Say so if the user asks to mute it.
 
 Report the returned mute list verbatim, and say the mute's scope.
