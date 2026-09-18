@@ -7,6 +7,12 @@ allowed-tools:
 
 # Mute a rule
 
+> **This command does not exist yet.** `stacktrace finding` is not in any CLI
+> build, including `main`; the CLI answers ``No such command 'finding'``. Run
+> it, report that plainly, and stop. Do not substitute `stacktrace findings`,
+> which answers a different question, and do not describe what the output would
+> have said. The wording below is the contract for when the surface is built.
+
 ```bash
 stacktrace finding mute --rule <rule id>
 stacktrace finding mute --rule <rule id> --undo

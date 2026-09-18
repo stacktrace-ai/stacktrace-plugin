@@ -51,6 +51,15 @@ class PluginContractTests(unittest.TestCase):
         )
 
 
+    def test_skills_name_the_session_variable_claude_actually_sets(self) -> None:
+        # Claude Code exports CLAUDE_CODE_SESSION_ID. A skill that reads
+        # CLAUDE_SESSION_ID gets an empty string and passes it as a real
+        # argument, which fails as a missing session rather than as a typo.
+        for skill in sorted((ROOT / "skills").glob("*/SKILL.md")):
+            with self.subTest(skill=skill.parent.name):
+                body = skill.read_text(encoding="utf-8")
+                self.assertNotIn("CLAUDE_SESSION_ID", body)
+
     def test_plugin_contains_no_credential_or_sync_state(self) -> None:
         payload_files = [
             ROOT / ".claude-plugin/plugin.json",

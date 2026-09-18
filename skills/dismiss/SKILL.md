@@ -7,8 +7,14 @@ allowed-tools:
 
 # Dismiss a finding
 
+> **This command does not exist yet.** `stacktrace finding` is not in any CLI
+> build, including `main`; the CLI answers ``No such command 'finding'``. Run
+> it, report that plainly, and stop. Do not substitute `stacktrace findings`,
+> which answers a different question, and do not describe what the output would
+> have said. The wording below is the contract for when the surface is built.
+
 ```bash
-stacktrace finding dismiss --session "$CLAUDE_SESSION_ID"
+stacktrace finding dismiss --session "$CLAUDE_CODE_SESSION_ID"
 ```
 
 If the user gave a reason matching `not-useful`, `already-knew`, `wrong`, or

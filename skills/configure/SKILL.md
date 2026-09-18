@@ -19,3 +19,16 @@ disable-model-invocation: true
    newly installed CLI.
 4. Run `stacktrace daemon status` after the reload. Configuration is complete
    when the CLI reports its version and the daemon reports that it is running.
+
+If step 4 answers `No such command 'daemon'`, the installed release predates
+the daemon. PyPI's latest is 0.3.1 and the daemon merged after it, so a plain
+`uv tool install stacktrace-cli` cannot produce a working monitor. With the
+user's approval, install from source instead:
+
+```bash
+uv tool install --force --from git+https://github.com/stacktrace-ai/stacktrace.git stacktrace-cli
+```
+
+Say which one you installed. A CLI that reports a version is not the same as a
+CLI that can subscribe, and reporting the first as if it were the second is the
+failure this step exists to prevent.

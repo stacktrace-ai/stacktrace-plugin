@@ -112,19 +112,32 @@ text or upload transcripts. `accepted`, `delivered`, and `read` remain distinct.
 
 ## Current runtime dependencies
 
-Two dependencies gate what actually runs today. Neither is a defect in this
-repository, and both are checked at runtime rather than assumed:
+What the plugin declares is ahead of what an installed CLI can do. None of this
+is a defect in this repository, and all of it is checked at runtime rather than
+assumed. State verified 2026-09-18:
 
-| Dependency | State | Effect when unmet |
+| Dependency | State | Effect |
 | --- | --- | --- |
-| `stacktrace daemon` ([stacktrace#36](https://github.com/stacktrace-ai/stacktrace/pull/36)) | Open, unmerged | `daemon subscribe` and `daemon status` are unavailable, so the monitor cannot subscribe. `/stacktrace:status` reports this rather than implying monitoring is live. |
-| Hosted Slack service public OAuth | Not activated | `connect` cannot complete. The workflow reports pending or unavailable; it never reports success. |
+| `stacktrace daemon`, `stacktrace findings` ([stacktrace#36](https://github.com/stacktrace-ai/stacktrace/pull/36)) | Merged, unreleased | Both exist on `stacktrace` `main` (0.4.0) and neither is in a release. PyPI's latest is 0.3.1, uploaded four days before the merge, so `uv tool install stacktrace-cli` yields a CLI with no `daemon`: the monitor cannot subscribe and `/stacktrace:findings` cannot run. Install from git to exercise them. |
+| `stacktrace finding why\|dismiss\|mute` | **Not implemented** | No such command exists on `main`; the CLI answers `No such command 'finding'`. `/stacktrace:why`, `/stacktrace:dismiss`, and `/stacktrace:mute` cannot run, and no release will change that until the command surface is built. |
+| Hosted Slack service public OAuth | Activated | `connect` can complete. The service runs `stacktrace-slack-hosted` with the three OAuth secrets set, and `/readyz` returns ready. |
 
-The hosted service at `stacktrace-slack-app-production.up.railway.app` runs the
-single-workspace entrypoint. Public OAuth additionally needs `SLACK_CLIENT_ID`,
-`SLACK_CLIENT_SECRET`, and `SLACK_SIGNING_SECRET`, and the container command set
-to `stacktrace-slack-hosted`. Until both are done, treat Slack connect as
-unavailable and do not report OAuth as working.
+Until a release carries the daemon, install the CLI from source to test the
+monitor path:
+
+```bash
+uv tool install --force --from git+https://github.com/stacktrace-ai/stacktrace.git stacktrace-cli
+```
+
+`monitors.json` omits `--session-id`, which `daemon subscribe` marks required
+while documenting a default from `CLAUDE_CODE_SESSION_ID`. The monitor
+therefore depends on that variable being set in the session's environment.
+
+The three unimplemented triage workflows are kept rather than deleted: they
+carry the wording the CLI surface is meant to honour, and the distinction
+between dismissing one finding and muting a rule is the part worth not
+relitigating. They must report that they cannot run. Inventing output for them
+is worse than saying the command does not exist.
 
 ## Development
 
