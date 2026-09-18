@@ -6,9 +6,11 @@ Managed Codex reviews; Anthropic-hosted Claude fixes review findings and CI
 failures. The agents run outside GitHub Actions. Normal lint/test CI still uses
 GitHub runners. No Actions dispatcher or routine API token is needed for the steady-state loop.
 
-## Configuration
+## Target configuration
 
 - Codex repository settings: **Review all PRs**, **On every push**.
+  Verify this in the Codex console; the session fallback below can request a
+  missing review, but does not change the native repository setting.
 - One active Claude enrollment routine for this repository, with the exact
   [saved prompt](../.github/managed-autofix-prompt.md).
 - Native GitHub trigger: `pull_request.opened`, non-draft only, no author or
@@ -21,8 +23,13 @@ GitHub runners. No Actions dispatcher or routine API token is needed for the ste
 
 Active routine: [trig_01JijKAzDwe3KYKEReBWkdkd](https://claude.ai/code/routines/trig_01JijKAzDwe3KYKEReBWkdkd).
 GitHub trigger: `294e66bb-0960-4f7a-9b74-f7b683bbad36`.
-Creation accepted the PR-open/non-draft configuration; the management API does
-not return saved action/filter values, so verify trigger behavior from run logs.
+Status: **automatic enrollment is not verified**. The API accepted the
+PR-open/non-draft configuration, but opening PR #6 produced no routine run.
+The management API does not return saved action/filter values, and the cause
+is unresolved. Verify the GitHub trigger in the routine UI and observe a new
+PR enroll before relying on it. Existing PRs are being backfilled through
+routine-created sessions. Native Codex auto-review settings are also unverified here;
+explicit review requests have worked.
 The saved cloud prompt and this file are separate configuration surfaces:
 merging a prompt edit does not deploy it to Claude. Update the routine, read
 back its saved prompt, and steer any existing sessions that need the change.
@@ -64,10 +71,15 @@ This is an instruction-level limit, not a platform-enforced quota.
 
 ## Existing PRs and recovery
 
-PR-open triggers do not backfill old PRs. Manually run the same routine with an
-explicit PR URL as run context, first checking existing runs/progress comments
-for a watcher to reuse. Confirm an actual `subscribe_pr_activity` success;
-merely starting or completing a routine run is not proof of enrollment.
+PR-open triggers do not backfill old PRs. First check existing runs and progress
+comments for a watcher to reuse. Otherwise start the repository's configured
+routine with the explicit PR URL as run context. If the run receives no target,
+send the URL directly to that existing cloud session before it acts. The tested
+recovery path used `claude -p --cloud SESSION_ID` to supply the missing target.
+Do not launch a replacement with bare `claude --cloud`: those sessions lacked
+the repository attachment and `subscribe_pr_activity` capability in this rollout.
+Confirm an actual `subscribe_pr_activity` success; merely starting or
+completing a cloud session is not proof of enrollment.
 If the current head has no queued, running, or completed Codex review, the
 managed session requests `@codex review` once, recording a full-SHA marker in
 the request comment. This supplies a fallback when native automatic review is
