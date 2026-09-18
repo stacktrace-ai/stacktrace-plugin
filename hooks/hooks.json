@@ -1,0 +1,15 @@
+{
+  "description": "Teach Claude how to deliver sanitized Stacktrace monitor events.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/session_start.py\""
+          }
+        ]
+      }
+    ]
+  }
+}

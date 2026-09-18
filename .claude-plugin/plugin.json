@@ -1,0 +1,20 @@
+{
+  "name": "stacktrace",
+  "displayName": "Stacktrace",
+  "description": "Automatic runtime detection and native notifications for Claude Code sessions.",
+  "author": {
+    "name": "Stacktrace AI",
+    "url": "https://stacktrace.ai"
+  },
+  "homepage": "https://stacktrace.ai",
+  "repository": "https://github.com/stacktrace-ai/stacktrace-claude-plugin",
+  "keywords": [
+    "agent-security",
+    "runtime-detection",
+    "claude-code",
+    "stacktrace"
+  ],
+  "experimental": {
+    "monitors": "./monitors/monitors.json"
+  }
+}
