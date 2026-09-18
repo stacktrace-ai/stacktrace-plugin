@@ -8,10 +8,11 @@ import re
 import shutil
 import subprocess
 import sys
+import unicodedata
 from urllib.parse import urlsplit
 
 IDENTIFIER = re.compile(r"[A-Za-z0-9_-]{1,128}\Z")
-PATH_SHAPED = re.compile(r"\A(?:[A-Za-z]:[\\/]|\\\\|~[\\/]|\.\.?[\\/]|/)")
+PATH_SHAPED = re.compile(r"\A(?:[A-Za-z]:|\\+|~|\.\.?[\\/]|/)")
 
 
 def arguments(request: dict) -> list[str]:
@@ -47,7 +48,8 @@ def arguments(request: dict) -> list[str]:
                 raise ValueError("Connect requires short, printable project and device labels.")
             label = label.strip()
             if (not label or len(label) > 80
-                    or any(ord(c) < 32 for c in label) or PATH_SHAPED.match(label)):
+                    or any(unicodedata.category(c).startswith("C") for c in label)
+                    or PATH_SHAPED.match(label)):
                 raise ValueError(
                     "Connect requires short, printable project and device labels, not filesystem paths."
                 )
@@ -55,6 +57,12 @@ def arguments(request: dict) -> list[str]:
     elif any(name in request for name in ("project_id", "project_label", "device_label")):
         raise ValueError("Project and device fields apply only to connect.")
     return result
+
+
+def timeout_message(action: str) -> str:
+    if action == "connect":
+        return "Slack workflow timed out. Retry connect to resume pending pairing."
+    return f"Slack workflow timed out. Retry {action} if it did not complete."
 
 
 def main() -> int:
@@ -67,6 +75,7 @@ def main() -> int:
     except (ValueError, TypeError):
         print("Invalid Slack workflow request; see /stacktrace:slack usage.", file=sys.stderr)
         return 2
+    action = request["action"]
     executable = shutil.which("stacktrace-slack")
     if not executable:
         print(
@@ -78,7 +87,7 @@ def main() -> int:
     try:
         return subprocess.run([executable, *argv], shell=False, check=False, timeout=180).returncode
     except subprocess.TimeoutExpired:
-        print("Slack workflow timed out. Retry connect to resume pending pairing.", file=sys.stderr)
+        print(timeout_message(action), file=sys.stderr)
         return 124
     except OSError:
         print("Could not start the optional Slack adapter. Check its installation.", file=sys.stderr)

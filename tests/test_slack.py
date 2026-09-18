@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
 import subprocess
@@ -11,6 +12,13 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def _load_slack_module():
+    spec = importlib.util.spec_from_file_location("stacktrace_slack_script", ROOT / "scripts" / "slack.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 class SlackWorkflowTests(unittest.TestCase):
@@ -85,11 +93,36 @@ class SlackWorkflowTests(unittest.TestCase):
              "project_label": "./private-project"},
             {"action": "connect", "project_id": "project1",
              "project_label": "  /home/alice/private-project  "},
+            {"action": "connect", "project_id": "project1",
+             "project_label": "\\Users\\alice\\private"},
+            {"action": "connect", "project_id": "project1",
+             "project_label": "C:private"},
+            {"action": "connect", "project_id": "project1",
+             "project_label": "~alice/private"},
         ):
             with self.subTest(value=value):
                 response = self.run_workflow(value)
                 self.assertEqual(response.returncode, 2)
                 self.assertFalse(self.capture.exists())
+
+    def test_rejects_non_c0_control_characters_in_labels(self):
+        for label in ("Demo\x7f", "Demo‮DetupmoC"):
+            with self.subTest(label=label):
+                response = self.run_workflow({
+                    "action": "connect", "project_id": "project1", "project_label": label,
+                })
+                self.assertEqual(response.returncode, 2)
+                self.assertFalse(self.capture.exists())
+
+    def test_timeout_message_matches_requested_action(self):
+        slack = _load_slack_module()
+        connect_message = slack.timeout_message("connect")
+        self.assertIn("connect", connect_message)
+        self.assertIn("pending pairing", connect_message)
+        for action in ("status", "test", "disconnect"):
+            message = slack.timeout_message(action)
+            self.assertIn(action, message)
+            self.assertNotIn("pending pairing", message)
 
     def test_trims_surrounding_whitespace_from_safe_labels(self):
         response = self.run_workflow({
