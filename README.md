@@ -15,17 +15,63 @@ daemon interface rather than duplicating detection logic.
 
 ## Install
 
-During early testing, install directly from this repository:
+**Install the CLI first.** The order matters and is not a formality: Claude
+starts the session monitor at session start, and the monitor is the thing that
+runs the CLI. A session that begins without a working CLI cannot acquire one
+later, so installing the plugin first guarantees that its first session
+monitors nothing.
+
+While the daemon is merged but unreleased, the CLI must come from source — the
+published package cannot subscribe:
+
+```bash
+uv tool install --force --from git+https://github.com/stacktrace-ai/stacktrace.git stacktrace-cli
+```
+
+Then add the plugin:
 
 ```text
 /plugin marketplace add stacktrace-ai/stacktrace-plugin
 /plugin install stacktrace@stacktrace
-/stacktrace:configure
 ```
 
-`/stacktrace:configure` verifies or installs the `stacktrace` CLI. After a new
-installation, run `/reload-plugins` once so Claude starts the monitor with the
-CLI available.
+Then **quit and relaunch Claude**, and confirm:
+
+```text
+/stacktrace:status
+```
+
+`/reload-plugins` is not enough, for two independent reasons that both survive
+a reload: it cannot refresh the `PATH` the running process already inherited,
+and it does not start a session monitor mid-session.
+
+> This rests on the monitor being session-lifetime, as `spec.md` states
+> (*"Claude Code starts the plugin monitor once for the lifetime of an
+> interactive session"*). That behaviour is assumed here rather than verified
+> against the host; if a reload does start a monitor, this section is stricter
+> than it needs to be.
+
+If anything looks wrong at any point, `/stacktrace:configure` runs the same
+probe and names the one thing that is blocking delivery.
+
+### If the marketplace is refused
+
+```text
+Marketplace source '…' is blocked by enterprise policy.
+```
+
+A managed host can allowlist marketplaces in a root-owned managed-settings
+file, and an empty allowlist blocks every source including a local directory.
+This is a host policy decision. An administrator has to allow the marketplace;
+the plugin cannot and should not work around it.
+
+### A stopped daemon is usually fine
+
+`stacktrace daemon status` reporting "not running" is the normal idle state.
+The daemon is started by a subscriber and exits about five seconds after the
+last one disconnects, so asking outside a subscribed session always finds it
+down. What matters is whether anything *could* subscribe, which is what
+`/stacktrace:status` reports.
 
 ## Automatic flow
 
