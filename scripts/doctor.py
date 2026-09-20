@@ -172,13 +172,22 @@ def render(report: dict[str, Any], slack: dict[str, Any]) -> str:
     slack_state = slack["state"]
     slack_text = {
         "absent": "adapter not installed (optional)",
-        "unconfigured": "installed, no STACKTRACE_SLACK_URL set (optional)",
+        "unconfigured": "installed, not configured (optional)",
         "error": "unreachable or not paired",
         "unreadable": "responded with something unparseable",
         "pending": "paired but not subscribed",
         "connected": f"connected, {slack.get('delivered')} delivered",
     }[slack_state]
     lines.append(f"  [ -- ] Slack      {slack_text}")
+    # Connection state is not delivery. No code path in the installed core hands
+    # a finding to the Slack adapter, so even a subscribed connection carries
+    # nothing on its own. This is said on every run, in every Slack state,
+    # because the failure it prevents is silent: a "connected, N delivered" row
+    # otherwise reads as a working delivery path, and the user waits for a
+    # message that was never going to be sent.
+    lines.append(
+        "                    connection only \u2014 the core does not deliver findings to Slack"
+    )
 
     # Keep a multi-line action inside the report's left margin; an install
     # command that starts at column zero reads as output, not as instruction.

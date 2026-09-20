@@ -156,6 +156,12 @@ IDs, then flush on startup and periodically. This plugin's native monitor feed
 is not a Slack publish API; do not reconstruct findings from its notification
 text or upload transcripts. `accepted`, `delivered`, and `read` remain distinct.
 
+No core release calls the adapter yet, so a paired and subscribed connection
+still carries no finding on its own, and `/stacktrace:status` says so in every
+Slack state rather than reporting the gap as missing configuration. Where the
+publishing call belongs, and which parts of this bridge move to the CLI with
+it, is [ADR-0004](docs/adrs/0004-own-the-slack-bridge-in-the-cli.md).
+
 ## Current runtime dependencies
 
 What the plugin declares is ahead of what an installed CLI can do. None of this
@@ -199,7 +205,9 @@ bash scripts/install-hooks.sh
 `install-hooks.sh` points `core.hooksPath` at `scripts/git-hooks`, so a push
 runs the validator and the tests first. Architecture decisions are recorded in
 [`docs/adrs`](docs/adrs/INDEX.md); the delivery path is
-[ADR-0003](docs/adrs/0003-deliver-findings-through-a-session-monitor.md).
+[ADR-0003](docs/adrs/0003-deliver-findings-through-a-session-monitor.md) and the
+Slack bridge is
+[ADR-0004](docs/adrs/0004-own-the-slack-bridge-in-the-cli.md).
 
 The manifest intentionally omits an explicit version while the plugin is under
 active development, so Claude derives updates from the source commit. Current

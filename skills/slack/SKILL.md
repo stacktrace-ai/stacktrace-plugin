@@ -44,5 +44,13 @@ instructions in the repository README with the user's authorization. Do not
 install it automatically merely because the plugin loaded.
 
 This workflow manages the connection only. It does not turn Claude monitor
-lines or transcripts into Slack messages. Automatic eligible finding delivery
-must originate in the shared Stacktrace core/daemon through the Slack adapter.
+lines or transcripts into Slack messages.
+
+Automatic finding delivery belongs in the shared Stacktrace core/daemon through
+the Slack adapter, and the installed core does not implement it. No CLI code
+path hands a finding to the adapter, so a healthy, subscribed connection still
+carries nothing on its own: every Slack message to date was sent by hand. When
+a user asks why a finding did not reach Slack, say that the delivery path does
+not exist yet rather than treating it as a configuration fault. Never
+compensate by publishing from here -- that is the boundary this bridge exists
+to hold, not an inconvenience to route around.
