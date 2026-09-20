@@ -7,7 +7,11 @@ supersedes: null
 superseded-by: null
 ---
 
-## Context
+Subsystem: the agent plugin. The integration view across the plugin, daemon,
+sinks and CLI is `docs/specs/notification-delivery.md` in
+`stacktrace-ai/stacktrace`.
+
+## Motivation
 
 The plugin has no onboarding and no renderer. Neither absence is visible until
 you look for it.
@@ -15,20 +19,45 @@ you look for it.
 On a healthy first run the plugin says nothing. `scripts/session_start.sh` emits
 its guidance as `additionalContext`, which goes to the model and is never shown
 to the user. The healthy branch ends with "Say nothing about setup unless the
-user asks." Someone who installs the plugin, relaunches, and waits for a sign
+user asks." Someone who installs the plugin, relaunches and waits for a sign
 that it works will wait forever.
 
-The plugin also never asks how the user wants to be told. Everyone gets the same
-delivery, and there is nowhere to record a different answer.
+The plugin also never asks how the user wants to be told, and has nowhere to
+record a different answer.
 
-Rendering is in the same state. There is no colour handling anywhere in this
-repository. `CLAUDE.md` says colour is never the only carrier of meaning and
-that `NO_COLOR` is honoured, and nothing implements either rule. The alert a
-user sees today is the model improvising from one line of the `SessionStart`
-contract. It is not wrong, but it is not specified, so it varies by model, by
-session, and by how much context the model is holding.
+There is no colour handling anywhere in this repository. `CLAUDE.md` says colour
+is never the only carrier of meaning and that `NO_COLOR` is honoured, and
+nothing implements either rule. The alert a user sees is the model improvising
+from one line of the contract. It is not wrong, but it is not specified, so it
+varies by model, by session and by how much context the model is holding.
 
-## How an alert actually reaches the screen
+## Use cases
+
+A developer installs the plugin and relaunches. Onboarding asks how they want to
+be notified, connects Slack if they chose it, and says what was recorded.
+
+A finding arrives while the developer is working. The alert appears in the
+conversation in a fixed shape, with severity and confidence both shown.
+
+A developer runs with `NO_COLOR` set. The same alert appears without the glyph
+or emphasis, and loses no information.
+
+A developer declines desktop notifications. No `PushNotification` call is made
+for the rest of that session or any later one.
+
+## Functionality
+
+Onboarding runs once, is started by the user, and asks two questions. It records
+presentation choices locally. It does not record anything about which findings
+matter, because the policy system owns that.
+
+The alert has one specified shape. Severity and confidence are always both
+printed as labelled grades. Neither is ever carried by a glyph or colour alone.
+
+`NO_COLOR` is resolved by the hook, because the model cannot read the
+environment.
+
+## How an alert reaches the screen
 
 The plugin runs no code when a finding arrives. It contributes two declarations,
 and both are read at session start.
@@ -77,21 +106,34 @@ RUNTIME — once per notification
                   └──> send {type:"ack", event_id}   ← only after the flush
 ```
 
-Two things follow. The trigger is a line appearing on a stream, and the rule for
-what to do with it was installed at session start. And there is nowhere for
-plugin code to format anything, because nothing of ours runs between the
-monitor's stdout and the conversation.
+The trigger is a line appearing on a stream, and the rule for handling it was
+installed at session start. Nothing of the plugin's runs between the monitor's
+stdout and the conversation, so there is nowhere for plugin code to format
+anything. The specification is the artefact.
 
-So the specification is the artefact. It is the only thing that makes one
-session's alert look like the next one's.
+## Alternatives considered
 
-## Decision
+**Leave rendering to the model.** It already produces a reasonable line.
+Rejected: an unspecified format cannot be reviewed or tested, and it changes
+between sessions for reasons the user cannot see.
 
-### Onboarding asks two questions
+**Ask a third question, about which findings matter.** Rejected: that is a
+policy question and the policy system owns it. Collecting an answer here would
+create a second place where delivery is filtered.
 
-Not three. An earlier draft also asked which kinds of finding the user cares
-about. That is a policy question, the policy system owns it, and this plugin
-should not collect an answer to it.
+**Store presentation preferences in the CLI.** An earlier draft did this.
+Rejected: the CLI is host-agnostic and has no business holding "should Claude
+Code show a desktop notification".
+
+**Store a Slack on/off preference.** Rejected: a subscribed connection is the
+answer, and the adapter already records it. A second copy would go stale.
+
+**Read `NO_COLOR` in the model.** Rejected: the model cannot read the
+environment. The hook can, so the hook decides and tells it.
+
+## Design
+
+### Onboarding
 
 ```
   1  How do you want to be notified?
@@ -102,9 +144,12 @@ should not collect an answer to it.
                         the user confirms both in Slack
 ```
 
-Ask them with `AskUserQuestion`, one call per question, in order. The skill is
+Asked with `AskUserQuestion`, one call per question, in order. The skill sets
 `disable-model-invocation: true`, so the user opens this conversation and the
-model never starts it in the middle of their work.
+model never starts it mid-task.
+
+Slack is a handoff. The plugin names the command and reports what it printed. No
+token, recipient id or service origin is read into the conversation.
 
 ### Where each answer is stored
 
@@ -112,28 +157,21 @@ model never starts it in the middle of their work.
 | --- | --- | --- |
 | inline alert format | the model, via the contract | the plugin |
 | desktop notification on/off | the model, via `PushNotification` | the plugin |
-| Slack on/off | the daemon | nothing — a subscribed connection is the answer |
-
-The plugin stores its own presentation preferences. An earlier draft sent them
-to the CLI, which was wrong: the CLI is host-agnostic and has no business
-holding "should Claude Code show a desktop notification".
-
-Slack needs no preference at all. The connection either exists and is
-subscribed, or it does not, and the adapter already records that.
+| Slack on/off | the daemon | nothing; a subscribed connection is the answer |
 
 ```jsonc
 // ~/.claude/stacktrace-plugin.json — written by the onboarding skill,
-// read by scripts/session_start.sh. Absent means "defaults".
+// read by scripts/session_start.sh. Absent means defaults.
 {
   "desktop_notifications": true
 }
 ```
 
 `session_start.sh` already reads the environment, so it reads this too and emits
-different guidance. Nothing else in the plugin reads it, and no delivery state
-ever goes in it.
+different guidance. Nothing else in the plugin reads it. No delivery state goes
+in it.
 
-### The alert has a fixed shape
+### Alert shape
 
 ```
   ⛔ Stacktrace  high severity · high confidence
@@ -141,18 +179,14 @@ ever goes in it.
      stacktrace-injection-marker · /stacktrace:findings for the evidence
 ```
 
-Severity picks the glyph and the emphasis. Confidence is always printed as its
-own labelled grade. Both are always shown, and neither is ever implied by a
-glyph or a colour on its own.
+Severity picks the glyph and the emphasis. Confidence is printed as its own
+labelled grade. Both are always shown.
 
 The event carries no `confidence` field today, because `_safe_event` drops it.
-Until that changes the alert prints `confidence unstated`. It never guesses a
+Until that changes the alert prints `confidence unstated`, and never guesses a
 confidence from a severity.
 
-### `NO_COLOR` is resolved in the hook
-
-The model cannot read the environment and the hook can, so the hook decides and
-tells the model.
+### `NO_COLOR`
 
 ```sh
 colour_note() {
@@ -174,18 +208,22 @@ tested on both branches.
 The user finds out what the plugin will do while they can still change it.
 
 Rendering stops varying between sessions. A specified format can be reviewed and
-tested against `NO_COLOR`. An improvised one can only be observed.
+tested against `NO_COLOR`.
 
 Alerts print `confidence unstated` until the daemon sends the field and the
 relay stops dropping it. That is `stacktrace-ai/stacktrace#46`. Printing a grade
 we were not sent would be worse than saying we do not have one.
 
-Two questions is a floor. Anything finer — per-rule muting, per-project
-thresholds, quiet hours — belongs to the policy system or to the CLI, and is
-reachable through `/stacktrace:mute` and its siblings. If onboarding grows a
-third question, that is evidence the policy system needs a settings surface, not
-that this skill needs another page.
+The plugin now writes one file, holding presentation choices only. Delivery
+state stays where ADR-0031 put it.
 
-The plugin now writes one file. It holds presentation choices only. Delivery
-state stays where ADR-0031 put it, and nothing about a cursor, a retry or an
-acknowledgement goes near it.
+## Open issues
+
+Two questions is a floor. Per-rule muting, per-project thresholds and quiet
+hours belong to the policy system or the CLI. If onboarding grows a third
+question, that is evidence the policy system needs a settings surface, not that
+this skill needs another page.
+
+The desktop notification is suppressed by the harness while the terminal has
+focus. Onboarding says so, but a user who tests it with the terminal focused
+will still see nothing and may read that as broken.
