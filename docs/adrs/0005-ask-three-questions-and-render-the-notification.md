@@ -48,8 +48,9 @@ for the rest of that session or any later one.
 ## Functionality
 
 Onboarding runs once, is started by the user, and asks two questions. It records
-presentation choices locally. It does not record anything about which findings
-matter, because the policy system owns that.
+presentation choices locally, through a script rather than by writing the file
+itself. It does not record anything about which findings matter, because the
+policy system owns that.
 
 The alert has one specified shape. Severity and confidence are always both
 printed as labelled grades. Neither is ever carried by a glyph or colour alone.
@@ -113,6 +114,12 @@ anything. The specification is the artefact.
 
 ## Alternatives considered
 
+**Let the skill write the preferences file directly.** An earlier revision of
+this ADR said it would, and it is one less script to ship. Rejected: the three
+ways a hand-written file goes wrong are all invisible after the fact, and the
+skill would have to restate the file's schema in prose, where nothing checks it
+against the hook that reads it.
+
 **Leave rendering to the model.** It already produces a reasonable line.
 Rejected: an unspecified format cannot be reviewed or tested, and it changes
 between sessions for reasons the user cannot see.
@@ -160,8 +167,9 @@ token, recipient id or service origin is read into the conversation.
 | Slack on/off | the daemon | nothing; a subscribed connection is the answer |
 
 ```jsonc
-// ~/.claude/stacktrace-plugin.json — written by the onboarding skill,
-// read by scripts/session_start.sh. Absent means defaults.
+// ~/.claude/stacktrace-plugin.json — written by scripts/preferences.py on the
+// onboarding skill's behalf, read by scripts/session_start.sh.
+// Absent means defaults.
 {
   "desktop_notifications": true
 }
@@ -170,6 +178,25 @@ token, recipient id or service origin is read into the conversation.
 `session_start.sh` already reads the environment, so it reads this too and emits
 different guidance. Nothing else in the plugin reads it. No delivery state goes
 in it.
+
+The skill runs `scripts/preferences.py set <key> <true|false>` rather than
+writing the file itself. A model writing JSON by hand has three failures nobody
+can see afterwards: replacing the file instead of updating it, so keys it was
+never asked about are gone; writing something that does not parse, which the
+hook then treats as absent; and writing a key the hook does not read, which
+looks like a preference that was recorded and does nothing.
+
+The script updates one key, keeps keys it does not own, writes through a
+temporary file in the same directory, and refuses an unknown key. Absent,
+unreadable and malformed are one answer, and the same answer the hook reaches on
+its own, because a preferences file is not load-bearing and failing a session
+over one is worse than ignoring it.
+
+Both find the file the same way, through `CLAUDE_CONFIG_DIR` and then `~/.claude`.
+A reader and a writer that disagree about the path produce a preference recorded
+where nothing looks, which is indistinguishable from one that was ignored. That
+is why it is tested by writing with the script and reading through the hook,
+rather than testing each side alone.
 
 ### Alert shape
 
