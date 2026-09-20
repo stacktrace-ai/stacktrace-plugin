@@ -43,6 +43,21 @@ class PluginContractTests(unittest.TestCase):
         document = json.loads((ROOT / "hooks" / "hooks.json").read_text(encoding="utf-8"))
         self.assertEqual(set(document["hooks"]), {"SessionStart"})
 
+    def test_the_monitor_description_claims_no_grade(self) -> None:
+        """The description is a fixed string chosen when the plugin is authored.
+
+        It cannot vary by finding, by session, or by what policy decides, so
+        anything specific in it is a claim the plugin cannot keep. It said
+        "High-severity", which names a threshold the daemon owns and policy is
+        taking.
+        """
+        monitors = json.loads((ROOT / "monitors" / "monitors.json").read_text(encoding="utf-8"))
+        description = monitors[0]["description"].lower()
+
+        for grade in ("high", "critical", "medium", "low", "confidence", "severity"):
+            with self.subTest(grade=grade):
+                self.assertNotIn(grade, description)
+
     def test_monitor_invokes_the_stacktrace_subscription_directly(self) -> None:
         monitors = json.loads(
             (ROOT / "monitors" / "monitors.json").read_text(encoding="utf-8")
@@ -84,6 +99,18 @@ class AlertRenderingTests(unittest.TestCase):
         self.assertIn("Stacktrace alert rendering:", context)
         self.assertIn("two separate grades", context)
         self.assertIn("Never merge them into one word", context)
+
+    def test_the_contract_does_not_assert_what_the_daemon_sends(self) -> None:
+        """The plugin renders what arrives. It does not know what will arrive.
+
+        An earlier revision said the event carries no confidence field "today",
+        which is a fact about the daemon written into the plugin. It goes stale
+        the moment the daemon changes, and nothing here would fail when it did.
+        """
+        context = _session_start()
+        self.assertNotIn("today", context)
+        self.assertIn("Print the confidence grade the event carries", context)
+        self.assertIn("When the event has no confidence field", context)
 
     def test_absent_confidence_is_stated_and_never_inferred(self) -> None:
         # The wire strips every event to five fields and confidence is not one

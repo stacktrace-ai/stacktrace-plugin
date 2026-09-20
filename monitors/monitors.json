@@ -2,6 +2,6 @@
   {
     "name": "stacktrace-alerts",
     "command": "stacktrace daemon subscribe --agent-kind claude-code",
-    "description": "High-severity Stacktrace findings for this Claude session"
+    "description": "Stacktrace findings for this Claude session"
   }
 ]

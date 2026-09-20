@@ -1,7 +1,7 @@
 # Stacktrace Plugin
 
 Stacktrace host integrations automatically analyze agent runtime activity and
-return high-severity findings to the session that produced them. Claude Code is
+return findings to the session that produced them. Claude Code is
 the first supported host.
 
 Each host integration is a thin adapter over the Stacktrace CLI and daemon. The

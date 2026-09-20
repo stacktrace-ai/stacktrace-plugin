@@ -52,7 +52,7 @@ def main() -> int:
         {
             "name": "stacktrace-alerts",
             "command": "stacktrace daemon subscribe --agent-kind claude-code",
-            "description": "High-severity Stacktrace findings for this Claude session",
+            "description": "Stacktrace findings for this Claude session",
         }
     ]:
         fail("plugin must declare exactly one direct Stacktrace session monitor")

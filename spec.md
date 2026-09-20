@@ -174,8 +174,9 @@ event contract.
 ### Stacktrace decides what is notification-worthy
 
 Claude does not classify monitor events. The daemon applies local policy and
-sends only events that warrant immediate user attention. The initial default
-is high- and critical-severity, high-confidence findings.
+sends only events that warrant immediate user attention. Which those are is the
+daemon's to decide and change; nothing in this repository restates the rule,
+because a second copy of it is a second thing to keep in step.
 
 Low-severity findings, progress, heartbeats, and daemon diagnostics must never
 appear on monitor stdout. They remain available through Stacktrace status and
@@ -406,7 +407,7 @@ No active session should cause full rescans on every filesystem event.
 - Exactly one host daemon serves multiple simultaneous Claude sessions.
 - Exactly one monitor process subscribes per active Claude session.
 - Two sessions in the same repository receive only their own findings.
-- A high-confidence high-severity test finding produces one
+- An eligible test finding produces one
   `STACKTRACE_NOTIFY_V1` event and prompts Claude to call `PushNotification`.
 - Low-severity findings and daemon diagnostics do not enter Claude through
   monitor stdout.
