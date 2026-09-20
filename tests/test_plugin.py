@@ -163,8 +163,16 @@ class OnboardingSkillTests(unittest.TestCase):
     def test_the_only_file_written_is_the_preferences_file(self) -> None:
         body = self.body()
         self.assertIn("~/.claude/stacktrace-plugin.json", body)
-        self.assertIn("That is the only file this plugin writes", body)
+        self.assertIn("is the only file this plugin writes", body)
         self.assertIn("no delivery state ever goes in it", body)
+
+    def test_the_config_is_written_by_the_script_not_by_hand(self) -> None:
+        # A model writing this file by hand can replace it instead of updating
+        # it, or record a key the hook does not read. Neither is visible
+        # afterwards, which is why the skill is told to shell out.
+        body = self.body()
+        self.assertIn("scripts/preferences.py", body)
+        self.assertIn("Do not write the file by hand", body)
 
     def test_slack_has_no_stored_preference(self) -> None:
         # A second copy of "is Slack on" would go stale against the adapter.

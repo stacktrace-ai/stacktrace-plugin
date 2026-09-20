@@ -27,18 +27,25 @@ Run `command -v stacktrace`. If it is absent, say so, point the user at
 - **This session, the desktop, and Slack** — reaches the user when no session is
   running, which the first two cannot.
 
-Write the answer to `~/.claude/stacktrace-plugin.json`, creating it if needed
-and preserving any other keys already in it:
+Record it with the script. Do not write the file by hand:
 
-```json
-{
-  "desktop_notifications": true
-}
+```
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/preferences.py" set desktop_notifications false
 ```
 
-That is the only file this plugin writes. `scripts/session_start.sh` reads it at
-session start and tells the model what to do. Nothing else reads it, and no
-delivery state ever goes in it.
+Only run it for the answers that are not the default. Desktop notifications are
+on unless turned off, so the first option needs no write at all.
+
+The script updates one key and keeps the rest of the file, writes atomically,
+and refuses a key the hook does not read. Writing the JSON by hand can replace
+the file instead of updating it, or record a preference nothing acts on, and
+neither is visible afterwards.
+
+`~/.claude/stacktrace-plugin.json` is the only file this plugin writes.
+`scripts/session_start.sh` reads it at session start. Nothing else reads it, and
+no delivery state ever goes in it.
+
+Read the current state back with `preferences.py get`.
 
 The change takes effect at the next session start, because the contract is
 handed to the model once. Say so rather than implying it applies immediately.

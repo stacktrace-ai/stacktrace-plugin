@@ -20,7 +20,10 @@
 # a strange environment nor an edited preferences file can reshape the document.
 set -eu
 
-PREFERENCES="${HOME}/.claude/stacktrace-plugin.json"
+# The same file `scripts/preferences.py` writes, found the same way. A reader
+# and a writer that disagree about the path is a preference that is recorded and
+# never read, which looks exactly like one that was ignored.
+PREFERENCES="${CLAUDE_CONFIG_DIR:-${HOME}/.claude}/stacktrace-plugin.json"
 
 colour_note() {
 	if [ -n "${NO_COLOR-}" ]; then
