@@ -161,5 +161,88 @@ class SlackWorkflowTests(unittest.TestCase):
         self.assertIn("Native Stacktrace remains usable", response.stderr)
 
 
+class AdapterOutputProjectionTests(unittest.TestCase):
+    """The adapter's result is projected, never echoed.
+
+    `/v1/status` answers with the whole pairing binding spread into the body,
+    and a pairing answers with the credential itself. This bridge inherited the
+    adapter's stdout, so both reached the terminal and the agent transcript.
+    """
+
+    #: The shape the installed adapter actually returns for `status`, plus the
+    #: `credential` a pairing returns. Written out rather than referenced so a
+    #: change to the real adapter cannot silently weaken the test.
+    LEAKY_RESULT = {
+        "pairing_id": "nm9-PAIRING",
+        "team_id": "T0BSECRET",
+        "user_id": "U0BSECRET",
+        "credential": "tok-SECRET",
+        "project_id": "demo",
+        "device_label": "a laptop",
+        "subscribed": True,
+        "local_queue": {"accepted": 1},
+    }
+
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.path = Path(self.directory.name)
+        self.executable = self.path / "stacktrace-slack"
+        self.executable.write_text(
+            f"#!{sys.executable}\n"
+            "import os\n"
+            "preamble = os.environ.get('STUB_PREAMBLE')\n"
+            "if preamble:\n"
+            "    print(preamble)\n"
+            "print(os.environ['STUB_RESULT'])\n"
+        )
+        self.executable.chmod(0o700)
+        self.environment = {
+            **os.environ,
+            "PATH": str(self.path),
+            "STUB_RESULT": json.dumps(self.LEAKY_RESULT),
+        }
+
+    def run_workflow(self, value):
+        return subprocess.run(
+            [sys.executable, str(ROOT / "scripts/slack.py")],
+            input=json.dumps(value), text=True, capture_output=True,
+            env=self.environment, check=False,
+        )
+
+    def test_no_identifying_field_reaches_the_caller(self):
+        response = self.run_workflow({"action": "status"})
+        self.assertEqual(response.returncode, 0, response.stderr)
+        combined = response.stdout + response.stderr
+        for secret in ("T0BSECRET", "U0BSECRET", "tok-SECRET", "nm9-PAIRING"):
+            with self.subTest(secret=secret):
+                self.assertNotIn(secret, combined)
+
+    def test_the_allowlisted_fields_survive(self):
+        response = self.run_workflow({"action": "status"})
+        shown = json.loads(response.stdout.splitlines()[0])
+        self.assertEqual(shown, {"subscribed": True, "local_queue": {"accepted": 1}})
+
+    def test_it_says_how_much_it_withheld(self):
+        response = self.run_workflow({"action": "status"})
+        # Six of the eight keys are identifying; naming them would describe the
+        # document this bridge just declined to show.
+        self.assertIn("6 identifying field(s) withheld", response.stdout)
+        self.assertNotIn("pairing_id", response.stdout)
+
+    def test_a_non_json_line_passes_through(self):
+        # `connect` prints the verification URL and pairing code this way. The
+        # operator cannot complete a pairing without them, and neither is a
+        # credential.
+        self.environment["STUB_PREAMBLE"] = "Open: https://notify.example/pair/ABCD-1234"
+        response = self.run_workflow({"action": "status"})
+        self.assertIn("https://notify.example/pair/ABCD-1234", response.stdout)
+
+    def test_a_non_object_result_is_not_mangled(self):
+        self.environment["STUB_RESULT"] = json.dumps(["accepted"])
+        response = self.run_workflow({"action": "status"})
+        self.assertIn('["accepted"]', response.stdout)
+
+
 if __name__ == "__main__":
     unittest.main()

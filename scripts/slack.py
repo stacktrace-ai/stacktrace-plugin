@@ -1,5 +1,13 @@
 #!/usr/bin/env python3
-"""Dispatch an explicit Slack workflow to the installed, optional local adapter."""
+"""Dispatch an explicit Slack workflow to the installed, optional local adapter.
+
+The adapter's result is parsed and projected, never echoed. Its `status` answer
+spreads the whole pairing binding into the body, including the Slack `team_id`
+and `user_id`, and a `connect` answer carries the pairing `credential`. Letting
+that reach a terminal — or an agent transcript, which is worse, because it is
+stored and may be uploaded — publishes exactly what the pairing exists to keep
+private.
+"""
 
 from __future__ import annotations
 
@@ -9,6 +17,13 @@ import shutil
 import subprocess
 import sys
 from urllib.parse import urlsplit
+
+#: Result keys this bridge will print.
+#:
+#: An allowlist, not a denylist, because the hosted service owns the response
+#: shape and can add to it. A denylist would leak the first field someone adds;
+#: this withholds it and says how many it withheld.
+PRINTABLE_RESULT_KEYS = ("status", "subscribed", "local_queue", "event_id", "outcomes")
 
 IDENTIFIER = re.compile(r"[A-Za-z0-9_-]{1,128}\Z")
 # Separator-free path forms that a bare "no slash or backslash" rule can't
@@ -72,6 +87,32 @@ def timeout_message(action: str) -> str:
     return f"Slack workflow timed out. Retry {action} if it did not complete."
 
 
+def projected(line: str) -> str:
+    """One line of adapter stdout, with anything identifying removed.
+
+    A line that is not a JSON object is passed through. `connect` prints the
+    verification URL and the pairing code that way, and the operator needs
+    both: neither is a credential, and the pairing is useless without them.
+
+    A line that is a JSON object is rebuilt from `PRINTABLE_RESULT_KEYS` alone.
+    The count of withheld keys is reported rather than the keys themselves,
+    because naming them would describe the shape of a document this bridge has
+    just decided not to show.
+    """
+    try:
+        document = json.loads(line)
+    except ValueError:
+        return line
+    if not isinstance(document, dict):
+        return line
+    shown = {key: value for key, value in document.items() if key in PRINTABLE_RESULT_KEYS}
+    withheld = len(document) - len(shown)
+    rendered = json.dumps(shown, sort_keys=True)
+    if withheld:
+        return f"{rendered}\n{withheld} identifying field(s) withheld by the plugin."
+    return rendered
+
+
 def main() -> int:
     try:
         raw = sys.stdin.read(8193)
@@ -92,13 +133,29 @@ def main() -> int:
         )
         return 127
     try:
-        return subprocess.run([executable, *argv], shell=False, check=False, timeout=180).returncode
+        completed = subprocess.run(
+            [executable, *argv],
+            shell=False,
+            check=False,
+            timeout=180,
+            capture_output=True,
+            text=True,
+        )
     except subprocess.TimeoutExpired:
         print(timeout_message(action), file=sys.stderr)
         return 124
     except OSError:
         print("Could not start the optional Slack adapter. Check its installation.", file=sys.stderr)
         return 126
+    for line in completed.stdout.splitlines():
+        if line.strip():
+            print(projected(line))
+    # The adapter's own diagnostics, unprojected. They are written for a person
+    # to read and carry no result document; a failure that printed one would
+    # have printed it on stdout, which is projected above.
+    if completed.stderr.strip():
+        print(completed.stderr.rstrip(), file=sys.stderr)
+    return completed.returncode
 
 
 if __name__ == "__main__":
