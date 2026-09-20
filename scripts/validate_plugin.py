@@ -71,7 +71,11 @@ def main() -> int:
     if handler != expected_handler:
         fail("SessionStart must invoke only the notification guidance script")
 
-    expected_skills = {"configure", "findings", "status", "slack"}
+    # `onboarding` is named here rather than allowed to appear implicitly: it is
+    # the one skill that asks the user a question and writes a file, so gaining
+    # or losing it changes what a first run does without changing anything a
+    # reviewer reads.
+    expected_skills = {"configure", "findings", "status", "slack", "onboarding"}
     skills_root = ROOT / "skills"
     observed_skills = {
         path.name
