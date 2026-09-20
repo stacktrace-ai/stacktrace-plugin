@@ -4,9 +4,9 @@
 The adapter's result is parsed and projected, never echoed. Its `status` answer
 spreads the whole pairing binding into the body, including the Slack `team_id`
 and `user_id`, and a `connect` answer carries the pairing `credential`. Letting
-that reach a terminal — or an agent transcript, which is worse, because it is
-stored and may be uploaded — publishes exactly what the pairing exists to keep
-private.
+that reach a terminal publishes what the pairing exists to keep private. Letting
+it reach an agent transcript is worse, because a transcript is stored and may be
+uploaded.
 """
 
 from __future__ import annotations
@@ -16,6 +16,7 @@ import re
 import shutil
 import subprocess
 import sys
+import threading
 from urllib.parse import urlsplit
 
 #: Result keys this bridge will print.
@@ -132,30 +133,50 @@ def main() -> int:
             file=sys.stderr,
         )
         return 127
+    # Streamed rather than captured. `connect` prints the verification URL and
+    # pairing code, then polls while the operator confirms them in Slack, so
+    # buffering until exit would show the URL only after the pairing had already
+    # finished or timed out.
+    #
+    # stderr is left inherited. The adapter writes one diagnostic string there
+    # and never a result document, so there is nothing to project, and piping it
+    # would risk filling that pipe while we are blocked reading stdout.
     try:
-        completed = subprocess.run(
+        process = subprocess.Popen(
             [executable, *argv],
             shell=False,
-            check=False,
-            timeout=180,
-            capture_output=True,
+            stdout=subprocess.PIPE,
             text=True,
         )
-    except subprocess.TimeoutExpired:
-        print(timeout_message(action), file=sys.stderr)
-        return 124
     except OSError:
         print("Could not start the optional Slack adapter. Check its installation.", file=sys.stderr)
         return 126
-    for line in completed.stdout.splitlines():
-        if line.strip():
-            print(projected(line))
-    # The adapter's own diagnostics, unprojected. They are written for a person
-    # to read and carry no result document; a failure that printed one would
-    # have printed it on stdout, which is projected above.
-    if completed.stderr.strip():
-        print(completed.stderr.rstrip(), file=sys.stderr)
-    return completed.returncode
+
+    expired = False
+
+    def give_up() -> None:
+        nonlocal expired
+        expired = True
+        process.kill()
+
+    watchdog = threading.Timer(180, give_up)
+    watchdog.start()
+    try:
+        if process.stdout is not None:
+            for line in process.stdout:
+                text = line.rstrip("\n")
+                if text.strip():
+                    print(projected(text), flush=True)
+        process.wait()
+    finally:
+        watchdog.cancel()
+        if process.stdout is not None:
+            process.stdout.close()
+
+    if expired:
+        print(timeout_message(action), file=sys.stderr)
+        return 124
+    return process.returncode
 
 
 if __name__ == "__main__":

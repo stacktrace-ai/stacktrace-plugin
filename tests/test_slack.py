@@ -8,6 +8,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -242,6 +243,53 @@ class AdapterOutputProjectionTests(unittest.TestCase):
         self.environment["STUB_RESULT"] = json.dumps(["accepted"])
         response = self.run_workflow({"action": "status"})
         self.assertIn('["accepted"]', response.stdout)
+
+
+class StreamingTests(unittest.TestCase):
+    """Output reaches the caller before the adapter exits.
+
+    `connect` prints the verification URL and pairing code, then polls while the
+    operator confirms them in Slack. Buffering until exit would show the URL
+    only after the pairing had already finished or timed out, which makes the
+    command useless for the one action that needs a human mid-flight.
+    """
+
+    SLEEP = 3.0
+
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.path = Path(self.directory.name)
+        self.executable = self.path / "stacktrace-slack"
+        self.executable.write_text(
+            f"#!{sys.executable}\n"
+            "import sys, time\n"
+            "print('Open: https://notify.example/pair/ABCD-1234', flush=True)\n"
+            f"time.sleep({self.SLEEP})\n"
+            'print(\'{"status":"accepted"}\', flush=True)\n'
+        )
+        self.executable.chmod(0o700)
+        self.environment = {**os.environ, "PATH": str(self.path)}
+
+    def test_the_preamble_arrives_before_the_adapter_finishes(self):
+        started = time.monotonic()
+        process = subprocess.Popen(
+            [sys.executable, str(ROOT / "scripts/slack.py")],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True,
+            env=self.environment,
+        )
+        self.addCleanup(process.kill)
+        process.stdin.write(json.dumps({"action": "connect", "project_id": "demo",
+                                        "project_label": "Demo"}))
+        process.stdin.close()
+
+        first = process.stdout.readline()
+        elapsed = time.monotonic() - started
+
+        self.assertIn("ABCD-1234", first)
+        # Generous: the point is that it does not wait out the adapter's sleep.
+        self.assertLess(elapsed, self.SLEEP - 1.0, "output was buffered until exit")
+        self.assertEqual(process.wait(timeout=self.SLEEP + 5), 0)
 
 
 if __name__ == "__main__":
