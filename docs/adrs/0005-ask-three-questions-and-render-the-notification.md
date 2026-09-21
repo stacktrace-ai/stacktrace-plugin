@@ -294,14 +294,11 @@ The desktop notification is suppressed by the harness while the terminal has
 focus. Onboarding says so, but a user who tests it with the terminal focused
 will still see nothing and may read that as broken.
 
-The alert points at evidence that cannot be fetched. It ends with
-`/stacktrace:findings`, which works. `/stacktrace:why`, `/stacktrace:dismiss`
-and `/stacktrace:mute` do not: they call `stacktrace finding`, and no such
-command exists. A user reads an alert, asks why it fired, and gets an error.
+The alert points at evidence the plugin cannot fetch. It ends with
+`/stacktrace:findings`, which works, and that is the only pointer it offers.
 
-That is not fixable here. The event carries five fields, which is enough to say
-a rule fired and not enough to explain it. The evidence is in the daemon's
-finding store, so `why` is a read from it by `event_id`. `dismiss` and `mute`
-are writes that have to survive the session and mean the same thing whether they
-come from this plugin or from Slack, so the mute key belongs to the policy
-system's vocabulary. Tracked in ADR-0036 in `stacktrace-ai/stacktrace`.
+Acting on a finding from the plugin is out of scope. The event carries five
+fields, which says a rule fired and cannot explain it, so anything richer needs
+the daemon's finding store rather than the notification. Whether that arrives,
+and whether a decision taken here should mean anything anywhere else, are open
+and deliberately not answered here.
