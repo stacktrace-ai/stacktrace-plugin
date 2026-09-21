@@ -111,8 +111,9 @@ was sent to stop.
 **A third-party vendor: PostHog, Google Analytics or Cloudflare Web
 Analytics.** Rejected for now: each adds a processor, and its own
 sub-processors, to the privacy page of a product whose pitch is that data does
-not leave the machine. The service already has a batched, spooled uploader in
-`remote/client.py` and one Postgres table is enough at this volume. PostHog
+not leave the machine. The service already has a spool in `remote/spool.py`
+that writes atomically at mode 0600 and replays on the next run, and one
+Postgres table is enough at this volume. PostHog
 Cloud EU is the runner-up if first-party collection stalls.
 
 **Skip the logo.** Rejected: it costs three lines and it is the only moment the
@@ -289,22 +290,26 @@ Sent with every event when the state is `on`: a random install id, the CLI
 version, the OS name. Nothing else.
 
 `finding_delivered` carries the rule name, not the finding. The rule name comes
-from a fixed set of three. The severity comes from `Literal["low","medium","high"]`,
-owned by `stacktrace_cli.detector.finding` per that repository's ADR-0010. The
-sink comes from a fixed set of three. None of the three can carry user content,
+from a fixed set of three. The severity comes from
+`Literal["low","medium","high"]`, owned by `stacktrace_cli.detector.finding`
+per that repository's ADR-0010. The sink comes from a fixed set of three. None of the three can carry user content,
 which is why the event is safe to send and why no free-text field is admitted to
 this table.
 
 ### Where the preference lives
 
-`scripts/preferences.py` records it under `analytics`, in
-`~/.claude/stacktrace-plugin.json`, the one file this plugin writes. A missing
-file means `local`.
+Not here. The welcome screen runs `stacktrace telemetry local|on|off` and the
+CLI owns the setting, in the same idiom ADR-0005 already uses for Slack, where
+the welcome runs `stacktrace slack connect` rather than writing a credential.
 
-The counts do not live there. They belong to the CLI and the daemon, which are
-the things that observe the events, and they go in
-`~/.claude/stacktrace/counts.json`. The plugin records a preference and reads
-nothing back.
+The CLI has to own it because the CLI does the counting and the CLI runs
+without this plugin. A preference in `~/.claude/stacktrace-plugin.json` would
+be read by nothing on a machine that never installed the plugin, and a second
+copy of the setting is a second answer to the same question.
+
+`scripts/preferences.py` gains no `analytics` key. The plugin asks, calls the
+command, and reads nothing back. The CLI's ADR-0037 specifies the file, the
+counter format and the upload.
 
 ## Consequences
 
@@ -323,9 +328,9 @@ The counts file has to be worth reading on its own, because in the default
 state it is the only artefact. If `stacktrace telemetry show` prints something
 a user cannot interpret, the local state is theatre.
 
-Splitting the preference from the counts puts the setting in the plugin and the
-data in the CLI. Two repositories now have to agree on the name `analytics` and
-on the three state values.
+The plugin now shells out for a setting as well as for Slack. That is one more
+thing that fails when the CLI is absent, and the welcome already refuses to run
+without it, so the failure is in one place rather than two.
 
 ## Open issues
 
