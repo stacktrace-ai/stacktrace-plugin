@@ -292,9 +292,9 @@ version, the OS name. Nothing else.
 `finding_delivered` carries the rule name, not the finding. The rule name comes
 from a fixed set of three. The severity comes from
 `Literal["low","medium","high"]`, owned by `stacktrace_cli.detector.finding`
-per that repository's ADR-0010. The sink comes from a fixed set of three. None of the three can carry user content,
-which is why the event is safe to send and why no free-text field is admitted to
-this table.
+per that repository's ADR-0010. The sink comes from a fixed set of three.
+None of the three can carry user content, which is why the event is safe to
+send and why no free-text field is admitted to this table.
 
 ### Where the preference lives
 
