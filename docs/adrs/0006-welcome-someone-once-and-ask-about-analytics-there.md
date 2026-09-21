@@ -178,28 +178,22 @@ Three screens. The first two are printed, the third follows the answer.
 ```
   USAGE COUNTS
 
-  We count how the tool is used so we know which rules to keep.
-  Counting starts now. Sending does not, unless you say so.
-
-  What gets counted, in full:
+  We count how the tool is used, so we know which rules to keep.
 
     installed           once, on first run
     session_started     a session began
-    finding_delivered   rule name, severity, and where it went
-    command_run         which /stacktrace: command, nothing else
-    error               error type and the CLI version
+    finding_delivered   rule name, severity, where it went
+    command_run         which /stacktrace: command
+    error               error type and version
 
   Never counted: prompts, tool results, file contents, file paths,
-  repository names, remote URLs, branch names, finding text,
-  usernames, email addresses, or anything typed into a session.
+  repo or branch names, finding text, usernames, email.
 
-  > Keep them here   Counted in ~/.claude/stacktrace/counts.json.
-                     Nothing is sent. This is the default.
-    Send them        Uploaded once a day to api.stacktrace.ai.
-    Count nothing    The file is never written.
+  > Keep them here    Count locally, send nothing        (default)
+    Send them         Count locally, upload daily
+    Count nothing     Don't count at all
 
-  Either way, you can read the file yourself:
-    stacktrace telemetry show
+  Read them any time:  stacktrace telemetry show
 ```
 
 ```
