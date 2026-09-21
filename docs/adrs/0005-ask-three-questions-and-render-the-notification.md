@@ -52,8 +52,10 @@ presentation choices locally, through a script rather than by writing the file
 itself. It does not record anything about which findings matter, because the
 policy system owns that.
 
-The alert has one specified shape. Severity and confidence are always both
-printed as labelled grades. Neither is ever carried by a glyph or colour alone.
+The alert has one specified shape and the plugin supplies none of its words.
+Every value is printed as the event sent it. Severity and confidence are always
+both shown as labelled grades, and neither is ever carried by a glyph or colour
+alone. An absent grade is stated rather than inferred.
 
 `NO_COLOR` is resolved by the hook, because the model cannot read the
 environment.
@@ -200,18 +202,48 @@ rather than testing each side alone.
 
 ### Alert shape
 
+The plugin decides the arrangement. It decides none of the words.
+
+```
+  <glyph> Stacktrace  <severity> severity · <confidence> confidence
+     <title>
+     <rule_id> · /stacktrace:findings for the evidence
+```
+
+Every value comes from the event. `severity`, `confidence`, `title` and
+`rule_id` are printed as received. The plugin does not summarise the title,
+restate the body, add a recommendation the finding did not make, or decide that
+a grade means something.
+
+With a real event that reads:
+
 ```
   ⛔ Stacktrace  high severity · high confidence
      A tool result carried obfuscated, instruction-shaped content
      stacktrace-injection-marker · /stacktrace:findings for the evidence
 ```
 
-Severity picks the glyph and the emphasis. Confidence is printed as its own
-labelled grade. Both are always shown.
+Three rules, and they are the whole of what the plugin contributes:
 
-The event carries no `confidence` field today, because `_safe_event` drops it.
-Until that changes the alert prints `confidence unstated`, and never guesses a
-confidence from a severity.
+**Both grades are always printed, labelled.** Severity and confidence are
+orthogonal, so one never stands in for the other and neither is carried by a
+glyph or by colour alone.
+
+**Severity selects the glyph.** A stop sign for `critical`, a warning sign for
+`high`, and nothing for any other value. This is a mapping over whatever
+arrives, not a claim about what will: a severity the plugin does not recognise
+prints its own name with no glyph, rather than being dropped or rounded to one
+the plugin does know.
+
+**An absent grade is stated, never inferred.** When the event carries no
+`confidence`, the alert prints `confidence unstated`. It does not reach for the
+severity, and does not carry over a grade from an earlier event.
+
+Nothing here encodes which findings arrive or what a grade is worth. Those are
+the daemon's, and the plugin's copy of either would be a second thing to keep
+in step. The `confidence` field is absent until
+`stacktrace-ai/stacktrace#47` lands; the rule above is written so that landing
+changes the output and not this document.
 
 ### `NO_COLOR`
 
@@ -237,9 +269,16 @@ The user finds out what the plugin will do while they can still change it.
 Rendering stops varying between sessions. A specified format can be reviewed and
 tested against `NO_COLOR`.
 
-Alerts print `confidence unstated` until the daemon sends the field and the
-relay stops dropping it. That is `stacktrace-ai/stacktrace#46`. Printing a grade
-we were not sent would be worse than saying we do not have one.
+Alerts print `confidence unstated` for as long as the event carries no
+confidence, which is until `stacktrace-ai/stacktrace#47` both sends the field
+and stops the relay dropping it. Printing a grade we were not sent would be
+worse than saying we do not have one, and the rule is written against the
+event rather than against a date, so that change needs no edit here.
+
+What the plugin shows is bounded by what the daemon sends. Richer alerts are a
+question for the payload, not for this document: the plugin can only arrange
+fields it receives, and adding one here that the event does not carry would be
+inventing it.
 
 The plugin now writes one file, holding presentation choices only. Delivery
 state stays where ADR-0031 put it.
