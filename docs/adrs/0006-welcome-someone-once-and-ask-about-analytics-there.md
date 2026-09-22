@@ -60,10 +60,15 @@ the network.
 
 ## Alternatives considered
 
-**Show it automatically on first run.** Rejected: `SessionStart` guidance is
-model context, not user output, and the plugin has nowhere to print at session
-start without inventing one. A banner that appears unbidden on the first prompt
-of the day is also the thing people disable.
+**Wait for someone to run `/stacktrace:welcome`.** Rejected, and it was the
+first draft's answer. It works while nothing is sent until the screen is read.
+It stops working the moment usage metrics are on by default, because then the
+screen is a disclosure and a disclosure that waits to be asked for is not one.
+Nothing makes a person run the command.
+
+**Show it on every session start.** Rejected: a banner on the first prompt of
+the day is the thing people disable, and the fourth one teaches the reader to
+skip it. What survives is showing it exactly once.
 
 **Fold it into `/stacktrace:configure`.** Rejected: configure answers "is this
 working", which someone runs when it is not. The welcome answers "what is this",
@@ -132,8 +137,27 @@ product introduces itself. Kept small enough that it does not become the point.
 ### Where it lives
 
 A new skill, `skills/welcome/SKILL.md`, invoked as `/stacktrace:welcome`. It
-sets `disable-model-invocation: true`, so a person opens it and the model never
-starts it mid-task.
+sets `disable-model-invocation: true`, so the model never starts it mid-task on
+its own reading of a conversation.
+
+### Showing it once, without being asked
+
+`scripts/session_start.sh` looks for `~/.claude/stacktrace-welcomed`. When it is
+absent, the hook creates it and appends one instruction to `additionalContext`
+asking the model to run the welcome before anything else. When it is present the
+hook emits the monitor contract alone.
+
+The marker is written *before* the screen is shown, not after. A crash between
+the two costs one welcome. The other order costs a welcome on every session
+until something succeeds, which is the banner rejected above.
+
+A marker is not a preference. It records that we have said hello, not what the
+user answered, and the CLI still owns every setting.
+
+If the marker cannot be written — a read-only home, a full disk — the hook emits
+the contract and no welcome. Detection is the hook's job and the screen is not;
+a disclosure that takes the monitor down with it is a worse trade than a missed
+disclosure.
 
 `scripts/validate_plugin.py` names it, so gaining or losing it fails review
 rather than a session.

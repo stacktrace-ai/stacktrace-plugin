@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
+import tempfile
 import sys
 import unittest
 from pathlib import Path
@@ -21,14 +23,26 @@ class PluginContractTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout, "plugin scaffold ok\n")
 
-    def test_session_start_emits_only_the_notification_contract(self) -> None:
-        result = subprocess.run(
+    @staticmethod
+    def _session_start(home: str) -> subprocess.CompletedProcess[str]:
+        """Always with a scratch HOME. The hook writes a marker there, and a
+        test that used the real one would silently consume the developer's own
+        first-run welcome."""
+        environment = dict(os.environ, HOME=home)
+        environment.pop("CLAUDE_CONFIG_DIR", None)
+        return subprocess.run(
             ["sh", str(ROOT / "scripts" / "session_start.sh")],
             check=True,
             capture_output=True,
             text=True,
             input='{"untrusted":"input"}',
+            env=environment,
         )
+
+    def test_session_start_emits_only_the_notification_contract(self) -> None:
+        with tempfile.TemporaryDirectory() as home:
+            self._session_start(home)  # consume the one-time welcome
+            result = self._session_start(home)
         document = json.loads(result.stdout)
         output = document["hookSpecificOutput"]
         self.assertEqual(output["hookEventName"], "SessionStart")
@@ -37,6 +51,34 @@ class PluginContractTests(unittest.TestCase):
         self.assertIn("PushNotification", context)
         self.assertNotIn("untrusted", result.stdout)
         self.assertEqual(result.stderr, "")
+
+    def test_the_welcome_is_offered_once_per_installation(self) -> None:
+        """Telemetry is on before anyone opens the screen, so the disclosure
+        has to find the user. Once, not every session: a banner on the first
+        prompt of the day is the thing people disable."""
+        with tempfile.TemporaryDirectory() as home:
+            first = json.loads(self._session_start(home).stdout)
+            second = json.loads(self._session_start(home).stdout)
+
+        first_context = first["hookSpecificOutput"]["additionalContext"]
+        second_context = second["hookSpecificOutput"]["additionalContext"]
+        self.assertIn("/stacktrace:welcome", first_context)
+        self.assertNotIn("/stacktrace:welcome", second_context)
+        self.assertIn("STACKTRACE_NOTIFY_V1", second_context)
+
+    def test_an_unwritable_marker_costs_the_welcome_and_not_the_session(self) -> None:
+        """The contract is the hook's job; the welcome is a bonus. A read-only
+        home must not take the monitor down with it."""
+        with tempfile.TemporaryDirectory() as home:
+            os.chmod(home, 0o500)
+            try:
+                result = self._session_start(home)
+            finally:
+                os.chmod(home, 0o700)
+
+        context = json.loads(result.stdout)["hookSpecificOutput"]["additionalContext"]
+        self.assertIn("STACKTRACE_NOTIFY_V1", context)
+        self.assertNotIn("/stacktrace:welcome", context)
 
     def test_plugin_has_no_turn_or_session_end_detection_hook(self) -> None:
         document = json.loads((ROOT / "hooks" / "hooks.json").read_text(encoding="utf-8"))
