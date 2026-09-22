@@ -173,13 +173,16 @@ terminal with a prompt gutter.
 
   USAGE METRICS
 
-  We publish 4 events, as they happen: you installed, a session started,
-  a finding was delivered, an error and its type.
+  We publish 4 events, as they happen: you installed, a session
+  started, a finding was delivered and which one it was, an error
+  and its type. Every event also carries the install id, CLI
+  version and OS name.
 
-  We NEVER publish the finding itself, or any prompts, file names, paths or repo
-  names. We only publish counters, so we know the tool works.
+  We NEVER publish the finding itself, or any prompts, file names,
+  paths or repo names. We only publish those counters and that
+  metadata, so we know the tool works.
 
-  > Opt in    Send counters                        (default)
+  > Opt in    Send those                        (default)
     Opt out   Send nothing
 
   Read back anything sent:  stacktrace telemetry show
