@@ -6,7 +6,8 @@ the first supported host.
 
 Each host integration is a thin adapter over the Stacktrace CLI and daemon. The
 Claude adapter declares one session-lifetime monitor, adds notification guidance
-at session start, and provides configure, status, and findings workflows.
+at session start, and provides welcome, configure, status, and findings
+workflows.
 Parsing, detection, policy, persistence, and routing remain in Stacktrace.
 
 Future Codex and Cursor adapters belong in this repository. Host-specific
@@ -21,11 +22,16 @@ During early testing, install directly from this repository:
 /plugin marketplace add stacktrace-ai/stacktrace-plugin
 /plugin install stacktrace@stacktrace
 /stacktrace:configure
+/stacktrace:welcome
 ```
 
 `/stacktrace:configure` verifies or installs the `stacktrace` CLI. After a new
 installation, run `/reload-plugins` once so Claude starts the monitor with the
 CLI available.
+
+`/stacktrace:welcome` shows one screen: what the plugin detects, the four usage
+events the CLI can send, and one question about sending them. See
+[Welcome and usage telemetry](#welcome-and-usage-telemetry).
 
 ## Automatic flow
 
@@ -43,6 +49,7 @@ transcript content is not copied into notification events.
 The available workflows are:
 
 ```text
+/stacktrace:welcome
 /stacktrace:configure
 /stacktrace:status
 /stacktrace:findings
@@ -51,6 +58,27 @@ The available workflows are:
 
 Background monitors are currently a Claude Code experimental component and run
 only in interactive CLI sessions where the Monitor tool is available.
+
+## Welcome and usage telemetry
+
+`/stacktrace:welcome` runs only when a person asks for it. It prints one
+screen, 72 columns or narrower, that names the detection rules and every usage
+event, then asks one question with two answers. Opt in is the highlighted
+answer; a keystroke is still required to take it.
+
+The four events are `installed`, `session_started`, `finding_delivered` (rule,
+severity, sink, and for `agent-blocked` the reason code) and `error` (the
+exception class name). The finding itself, prompts, file names, paths and
+repository names are never sent.
+
+The plugin stores nothing. The screen runs `stacktrace telemetry on` or
+`stacktrace telemetry off`, and the CLI owns the setting. A machine that never
+runs the welcome has no setting, which the CLI reads as off. `stacktrace
+telemetry show` prints every event that was sent. The command ships with the
+CLI half of this design, `stacktrace-ai/stacktrace` ADR-0037; an older CLI
+exits non-zero and the skill reports that nothing was recorded.
+
+The decision record is [ADR-0006](docs/adrs/0006-welcome-someone-once-and-ask-about-analytics-there.md).
 
 ## Optional Slack connection
 
