@@ -41,19 +41,38 @@ class PluginContractTests(unittest.TestCase):
         self.assertEqual(result.stdout, "plugin scaffold ok\n")
 
     @classmethod
+    def _path_without_stacktrace(cls) -> str:
+        """The host's own PATH, minus any directory that already has a
+        `stacktrace` binary on it. A test for the CLI-gate needs a PATH the
+        CLI is genuinely absent from, not one that happens to lack it today
+        on this particular machine."""
+        dirs = [d for d in os.environ.get("PATH", "").split(os.pathsep) if d]
+        return os.pathsep.join(d for d in dirs if not (Path(d) / "stacktrace").exists())
+
+    @classmethod
+    def _environment(cls, home: str, *, no_stacktrace: bool = False) -> dict[str, str]:
+        """HOME is always the scratch directory, and NO_COLOR is never
+        inherited from whatever shell is running the suite: a developer or
+        CI image with it set would otherwise silently change what these
+        tests see."""
+        path = cls._path_without_stacktrace() if no_stacktrace else f"{cls._bindir.name}:{os.environ['PATH']}"
+        environment = dict(os.environ, HOME=home, PATH=path)
+        environment.pop("CLAUDE_CONFIG_DIR", None)
+        environment.pop("NO_COLOR", None)
+        return environment
+
+    @classmethod
     def _session_start(cls, home: str) -> subprocess.CompletedProcess[str]:
         """Always with a scratch HOME. The hook writes a marker there, and a
         test that used the real one would silently consume the developer's own
         first-run welcome."""
-        environment = dict(os.environ, HOME=home, PATH=f"{cls._bindir.name}:{os.environ['PATH']}")
-        environment.pop("CLAUDE_CONFIG_DIR", None)
         return subprocess.run(
             ["sh", str(ROOT / "scripts" / "session_start.sh")],
             check=True,
             capture_output=True,
             text=True,
             input='{"untrusted":"input"}',
-            env=environment,
+            env=cls._environment(home),
         )
 
     def test_session_start_emits_only_the_notification_contract(self) -> None:
@@ -119,13 +138,7 @@ class PluginContractTests(unittest.TestCase):
         exists, because every claim on it is about a program that has to
         already run. The hook has to refuse too, and it must not spend the
         one-time marker on a screen it never showed."""
-        assert subprocess.run(
-            ["sh", "-c", "command -v stacktrace"], capture_output=True
-        ).returncode != 0, "a real stacktrace binary on PATH would invalidate this test"
-
         with tempfile.TemporaryDirectory() as home:
-            environment = dict(os.environ, HOME=home)
-            environment.pop("CLAUDE_CONFIG_DIR", None)
             before = json.loads(
                 subprocess.run(
                     ["sh", str(ROOT / "scripts" / "session_start.sh")],
@@ -133,7 +146,7 @@ class PluginContractTests(unittest.TestCase):
                     capture_output=True,
                     text=True,
                     input='{"untrusted":"input"}',
-                    env=environment,
+                    env=self._environment(home, no_stacktrace=True),
                 ).stdout
             )
             self.assertNotIn("systemMessage", before)
@@ -148,13 +161,8 @@ class PluginContractTests(unittest.TestCase):
         the word under NO_COLOR, but the hook shows the screen without a model
         in the loop to read that instruction, so it has to do the swap itself."""
         with tempfile.TemporaryDirectory() as home:
-            environment = dict(
-                os.environ,
-                HOME=home,
-                NO_COLOR="1",
-                PATH=f"{self._bindir.name}:{os.environ['PATH']}",
-            )
-            environment.pop("CLAUDE_CONFIG_DIR", None)
+            environment = self._environment(home)
+            environment["NO_COLOR"] = "1"
             result = subprocess.run(
                 ["sh", str(ROOT / "scripts" / "session_start.sh")],
                 check=True,
