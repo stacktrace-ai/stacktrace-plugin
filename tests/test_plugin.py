@@ -65,6 +65,13 @@ class PluginContractTests(unittest.TestCase):
                 self.assertEqual(result.returncode, 1)
                 self.assertIn("semver version", result.stderr)
 
+    def test_validator_rejects_non_ascii_digits(self) -> None:
+        for version in ("1٢2.0.0", "0.1٠2.0", "0.1.٢"):
+            with self.subTest(version=version):
+                result = self._run_validator_with_version(version)
+                self.assertEqual(result.returncode, 1)
+                self.assertIn("semver version", result.stderr)
+
     def test_validator_accepts_compliant_versions(self) -> None:
         for version in ("0.1.0", "1.2.3", "10.20.30"):
             with self.subTest(version=version):

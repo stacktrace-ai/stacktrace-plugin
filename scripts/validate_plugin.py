@@ -37,7 +37,7 @@ def main() -> int:
     if not isinstance(manifest, dict) or manifest.get("name") != "stacktrace":
         fail("plugin manifest must name stacktrace")
     version = manifest.get("version")
-    semver_number = r"(?:0|[1-9]\d*)"
+    semver_number = r"(?:0|[1-9][0-9]*)"
     if not isinstance(version, str) or not re.fullmatch(
         rf"{semver_number}\.{semver_number}\.{semver_number}", version
     ):
