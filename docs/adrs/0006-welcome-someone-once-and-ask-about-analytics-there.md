@@ -140,25 +140,23 @@ terminal with a prompt gutter.
 
   WHAT GETS DETECTED
 
-    credential-egress   Credential-shaped material reached an
-                        outbound call
-    agent-blocked       Why the agent stopped, in words, with
-                        what to do about it
+  credential-egress
+    Credential-shaped material reached an outbound call.
+
+  agent-blocked
+    Why the agent stopped, in words, with what to do about it.
+
+      quota_exhausted     Spend limit reached. Stops the session.
+      policy_blocked      A safety check refused. Stops the session.
+      upstream_refused    A service refused the request.
+      provider_throttled  Too many requests, too quickly.
 
 
   USAGE
 
-  Opt in and we send four things as they happen: that you
+  Opt in and we send four events as they happen: that you
   installed, that a session started, that a finding was
-  delivered, and the type of any error.
-
-  When the agent is blocked we also send why, from this list
-  and nothing else:
-
-    quota_exhausted     Spend limit reached
-    policy_blocked      A safety check refused
-    upstream_refused    A service refused the request
-    provider_throttled  Too many requests, too quickly
+  delivered and which one it was, and the type of any error.
 
   The finding itself is never sent. We count that one was
   delivered, which is how we tell the tool is working.
@@ -167,7 +165,7 @@ terminal with a prompt gutter.
   a repo name, a command you ran or the text of a finding.
 
   > Opt out   Nothing is sent                        (default)
-    Opt in    The four above, as they happen
+    Opt in    The four events above, as they happen
 
   Everything we send is also written down here, so you can read
   it back at any time:  stacktrace telemetry show
@@ -210,6 +208,16 @@ no free-text field, and no part of the finding itself.
 `agent-blocked` is the rule a person is most likely to see, and "the agent
 stopped" is not a number anyone can act on. Counting the reason is what
 separates a spend limit from a rate limit.
+
+The codes are listed under the rule that produces them, not under the usage
+question. They are what the tool can tell you, which is the thing someone
+reading a welcome screen wants. Listing them a second time beside the consent
+question would make a capability read as a disclosure, and pad the one section
+that has to stay short enough to be read.
+
+The usage paragraph says a finding was delivered "and which one it was", which
+covers the rule and the reason without repeating a list that is already on the
+screen. Someone answering the question has seen the whole vocabulary.
 
 | Reason | What happened | Who can act | Ends the session |
 | --- | --- | --- | --- |
