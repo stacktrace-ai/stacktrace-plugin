@@ -284,8 +284,8 @@ to prevent.
 
 Someone who installs the CLI and never runs `/stacktrace:welcome` sends
 nothing, forever, with no prompt and no flag. That is the clause Article 5(3)
-actually turns on. The highlight only moves the cursor for a person who is looking at a
-screen that has already told them what it will send.
+actually turns on. The highlight only moves the cursor for a person looking at
+a screen that has already told them what it will send.
 
 ## Consequences
 
