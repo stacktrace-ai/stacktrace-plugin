@@ -13,6 +13,23 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class PluginContractTests(unittest.TestCase):
+    """Everything here except the CLI-gate test itself runs with a stub
+    `stacktrace` on PATH: the hook now refuses to show the welcome without
+    one, and these tests are about the marker and screen, not that gate."""
+
+    _bindir: tempfile.TemporaryDirectory[str]
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls._bindir = tempfile.TemporaryDirectory()
+        stub = Path(cls._bindir.name, "stacktrace")
+        stub.write_text("#!/bin/sh\nexit 0\n")
+        stub.chmod(0o755)
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        cls._bindir.cleanup()
+
     def test_validator_accepts_the_repository(self) -> None:
         result = subprocess.run(
             [sys.executable, str(ROOT / "scripts" / "validate_plugin.py")],
@@ -23,12 +40,12 @@ class PluginContractTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout, "plugin scaffold ok\n")
 
-    @staticmethod
-    def _session_start(home: str) -> subprocess.CompletedProcess[str]:
+    @classmethod
+    def _session_start(cls, home: str) -> subprocess.CompletedProcess[str]:
         """Always with a scratch HOME. The hook writes a marker there, and a
         test that used the real one would silently consume the developer's own
         first-run welcome."""
-        environment = dict(os.environ, HOME=home)
+        environment = dict(os.environ, HOME=home, PATH=f"{cls._bindir.name}:{os.environ['PATH']}")
         environment.pop("CLAUDE_CONFIG_DIR", None)
         return subprocess.run(
             ["sh", str(ROOT / "scripts" / "session_start.sh")],
@@ -96,6 +113,62 @@ class PluginContractTests(unittest.TestCase):
             ]
 
         self.assertNotIn("/stacktrace:welcome", context)
+
+    def test_the_welcome_waits_for_the_cli(self) -> None:
+        """The skill's own step 1 refuses to print the screen before the CLI
+        exists, because every claim on it is about a program that has to
+        already run. The hook has to refuse too, and it must not spend the
+        one-time marker on a screen it never showed."""
+        assert subprocess.run(
+            ["sh", "-c", "command -v stacktrace"], capture_output=True
+        ).returncode != 0, "a real stacktrace binary on PATH would invalidate this test"
+
+        with tempfile.TemporaryDirectory() as home:
+            environment = dict(os.environ, HOME=home)
+            environment.pop("CLAUDE_CONFIG_DIR", None)
+            before = json.loads(
+                subprocess.run(
+                    ["sh", str(ROOT / "scripts" / "session_start.sh")],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                    input='{"untrusted":"input"}',
+                    env=environment,
+                ).stdout
+            )
+            self.assertNotIn("systemMessage", before)
+            self.assertFalse(Path(home, ".claude", "stacktrace-welcomed").exists())
+
+            after = json.loads(self._session_start(home).stdout)
+
+        self.assertIn("DETECTION POLICIES", after["systemMessage"])
+
+    def test_no_color_replaces_the_wordmark_with_the_word(self) -> None:
+        """The skill tells whoever prints the screen to swap the wordmark for
+        the word under NO_COLOR, but the hook shows the screen without a model
+        in the loop to read that instruction, so it has to do the swap itself."""
+        with tempfile.TemporaryDirectory() as home:
+            environment = dict(
+                os.environ,
+                HOME=home,
+                NO_COLOR="1",
+                PATH=f"{self._bindir.name}:{os.environ['PATH']}",
+            )
+            environment.pop("CLAUDE_CONFIG_DIR", None)
+            result = subprocess.run(
+                ["sh", str(ROOT / "scripts" / "session_start.sh")],
+                check=True,
+                capture_output=True,
+                text=True,
+                input='{"untrusted":"input"}',
+                env=environment,
+            )
+        shown = json.loads(result.stdout)["systemMessage"]
+
+        self.assertIn("STACKTRACE", shown.split("\n")[0])
+        for glyph in "┌└├┴┬┤":
+            self.assertNotIn(glyph, shown)
+        self.assertIn("DETECTION POLICIES", shown)
 
     def test_an_unwritable_marker_costs_the_welcome_and_not_the_session(self) -> None:
         """The contract is the hook's job; the welcome is a bonus. A read-only
