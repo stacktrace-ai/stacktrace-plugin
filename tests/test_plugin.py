@@ -60,11 +60,42 @@ class PluginContractTests(unittest.TestCase):
             first = json.loads(self._session_start(home).stdout)
             second = json.loads(self._session_start(home).stdout)
 
-        first_context = first["hookSpecificOutput"]["additionalContext"]
-        second_context = second["hookSpecificOutput"]["additionalContext"]
-        self.assertIn("/stacktrace:welcome", first_context)
-        self.assertNotIn("/stacktrace:welcome", second_context)
-        self.assertIn("STACKTRACE_NOTIFY_V1", second_context)
+        self.assertIn("DETECTION POLICIES", first["systemMessage"])
+        self.assertNotIn("systemMessage", second)
+        for document in (first, second):
+            context = document["hookSpecificOutput"]["additionalContext"]
+            self.assertIn("STACKTRACE_NOTIFY_V1", context)
+
+    def test_the_startup_screen_is_the_skill_screen_without_the_question(self) -> None:
+        """One copy of the screen, read out of the skill. A startup message
+        cannot take an answer, so the option cursor becomes the off command
+        and every other line is the skill's, in order."""
+        with tempfile.TemporaryDirectory() as home:
+            shown = json.loads(self._session_start(home).stdout)["systemMessage"]
+        skill = (ROOT / "skills" / "welcome" / "SKILL.md").read_text(encoding="utf-8")
+        expected = [
+            line
+            for line in WelcomeScreenTests._screen(skill).split("\n")
+            if not line.startswith(("  > Keep it on", "    Turn it off"))
+        ]
+
+        self.assertNotIn("Keep it on", shown)
+        self.assertIn("stacktrace telemetry off", shown)
+        self.assertEqual(
+            [line for line in shown.split("\n") if "Turn it off at any time" not in line],
+            expected,
+        )
+
+    def test_the_model_is_never_asked_to_run_the_welcome(self) -> None:
+        """The skill sets `disable-model-invocation: true`, so an instruction
+        to run it is one the model cannot follow. The first version gave that
+        instruction, and the welcome never appeared."""
+        with tempfile.TemporaryDirectory() as home:
+            context = json.loads(self._session_start(home).stdout)["hookSpecificOutput"][
+                "additionalContext"
+            ]
+
+        self.assertNotIn("/stacktrace:welcome", context)
 
     def test_an_unwritable_marker_costs_the_welcome_and_not_the_session(self) -> None:
         """The contract is the hook's job; the welcome is a bonus. A read-only
@@ -76,9 +107,9 @@ class PluginContractTests(unittest.TestCase):
             finally:
                 os.chmod(home, 0o700)
 
-        context = json.loads(result.stdout)["hookSpecificOutput"]["additionalContext"]
-        self.assertIn("STACKTRACE_NOTIFY_V1", context)
-        self.assertNotIn("/stacktrace:welcome", context)
+        document = json.loads(result.stdout)
+        self.assertIn("STACKTRACE_NOTIFY_V1", document["hookSpecificOutput"]["additionalContext"])
+        self.assertNotIn("systemMessage", document)
 
     def test_plugin_has_no_turn_or_session_end_detection_hook(self) -> None:
         document = json.loads((ROOT / "hooks" / "hooks.json").read_text(encoding="utf-8"))

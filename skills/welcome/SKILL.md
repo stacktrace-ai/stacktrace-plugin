@@ -59,7 +59,7 @@ Verbatim. Do not summarise it, reflow it, or add a preamble.
   > Keep it on    Publish those                 (default)
     Turn it off   Publish nothing
 
-  Read back anything sent:  stacktrace telemetry show
+  See exactly what can be sent:  stacktrace telemetry show
 ```
 
 Row two of the wordmark ends in a trailing space. Keep it, or the `E` sits a
