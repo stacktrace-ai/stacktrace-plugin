@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import re
 import stat
 import sys
 from pathlib import Path
@@ -35,8 +36,10 @@ def main() -> int:
 
     if not isinstance(manifest, dict) or manifest.get("name") != "stacktrace":
         fail("plugin manifest must name stacktrace")
-    if "version" in manifest:
-        fail("plugin manifest must omit version so the source commit drives updates")
+    version = manifest.get("version")
+    if not isinstance(version, str) or not re.fullmatch(r"\d+\.\d+\.\d+", version):
+        fail("plugin manifest must carry a semver version; bump it on every release "
+             "or installed copies never see the change")
     if manifest.get("experimental") != {"monitors": "./monitors/monitors.json"}:
         fail("plugin manifest must reference only the monitor declaration")
 

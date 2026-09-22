@@ -6,9 +6,14 @@ disable-model-invocation: true
 
 # Configure Stacktrace
 
-1. Run `command -v stacktrace` and `stacktrace --version`.
-2. If the command is absent, check for `uv`. With the user's approval, run
-   `uv tool install stacktrace-cli`, then re-run `command -v stacktrace`. If it
+1. Run `command -v stacktrace` and `stacktrace --version`. The plugin needs
+   `stacktrace-cli` 0.4.0 or newer: that is the first release with the daemon
+   the session monitor subscribes to. An older CLI is present but cannot serve
+   the plugin, so treat it the same as absent.
+2. If the command is absent or the version is older than 0.4.0, check for
+   `uv`. With the user's approval, run
+   `uv tool install --upgrade 'stacktrace-cli>=0.4.0'` (this also upgrades an
+   existing older install in place), then re-run `stacktrace --version`. If it
    is still not found, the tool executable directory (`uv tool dir --bin`) is
    likely missing from `PATH`; run `uv tool update-shell` and tell the user to
    fully restart Claude before continuing — `/reload-plugins` cannot refresh
