@@ -152,6 +152,14 @@ terminal with a prompt gutter.
   installed, that a session started, that a finding was
   delivered, and the type of any error.
 
+  When the agent is blocked we also send why, from this list
+  and nothing else:
+
+    quota_exhausted     Spend limit reached
+    policy_blocked      A safety check refused
+    upstream_refused    A service refused the request
+    provider_throttled  Too many requests, too quickly
+
   The finding itself is never sent. We count that one was
   delivered, which is how we tell the tool is working.
 
@@ -187,15 +195,32 @@ exhaustive.
 | --- | --- | --- |
 | `installed` | nothing | first run |
 | `session_started` | nothing | a session begins |
-| `finding_delivered` | rule, severity, sink | a finding reaches a sink |
+| `finding_delivered` | rule, severity, sink, reason | a finding reaches a sink |
 | `error` | exception class name | an error is caught |
 
 Every event also carries the install id, the CLI version and the OS name.
 
 `finding_delivered` carries a rule name drawn from the catalogue, a severity
-from `Literal["low","medium","high"]` and a sink name from the registry in that
-repository's ADR-0036. Three closed sets, no free-text field, and no part of the
-finding itself.
+from `Literal["low","medium","high"]`, a sink name from the registry in that
+repository's ADR-0036, and for `agent-blocked` a reason code. Four closed sets,
+no free-text field, and no part of the finding itself.
+
+### The reason codes
+
+`agent-blocked` is the rule a person is most likely to see, and "the agent
+stopped" is not a number anyone can act on. Counting the reason is what
+separates a spend limit from a rate limit.
+
+| Reason | What happened | Who can act | Ends the session |
+| --- | --- | --- | --- |
+| `quota_exhausted` | Spend limit reached; calls stop until it resets | user | yes |
+| `policy_blocked` | A safety check refused, and will keep refusing | user | yes |
+| `upstream_refused` | A service refused the request | upstream | no |
+| `provider_throttled` | Too many requests too quickly; clears itself | upstream | no |
+
+Only the code is sent. The other three columns are functions of it, held in
+`detector/blocked.py`, so sending them would be sending the same fact three
+more times and inviting the copies to disagree.
 
 `error` carries the exception class name and never the message. A message
 carries paths, and `RemoteServerError: could not reach api.internal.acme.com` is
