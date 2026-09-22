@@ -51,8 +51,9 @@ It states what is detected as it is on the day it runs.
 It names every event before asking about any of them, and says plainly that a
 finding's content is never among them.
 
-It asks once, records the answer, and never asks again. Opt in is the
-highlighted answer and a keystroke is still required to take it.
+It asks once, records the answer, and never asks again. Usage metrics are
+already running when the screen appears, so it discloses first and offers the
+off switch second. Keeping them on is the highlighted answer.
 
 It is a screen, not a wizard. No progress bar, no multi-step flow, no waiting on
 the network.
@@ -68,36 +69,29 @@ of the day is also the thing people disable.
 working", which someone runs when it is not. The welcome answers "what is this",
 asked at a different time, and merging them makes the failure path longer.
 
-**Send without asking, with an opt-out flag somewhere.** Rejected on law.
-ePrivacy Directive Article 5(3) requires consent before storing or accessing
-information on a user's terminal equipment. EDPB Guidelines 2/2023, adopted 7
-October 2024, closes each exit: paragraph 6, the trigger is "information" rather
-than personal data, so anonymity is irrelevant; paragraph 36, the scope includes
-"customized software", so not being a browser does not help; paragraph 53, *"The
-fact that this information is being produced locally does not preclude the
-application of Article 5(3) ePD"*, which defeats the argument that counts
-computed here are ours to send. France permits a narrow exemption under CNIL
-Sheet n°16 on seven cumulative conditions. The UK ICO requires consent.
+**Ask before anything is sent.** Rejected, and this is the decision that
+shapes the rest of the screen. `stacktrace-ai/stacktrace` ADR-0039 makes usage
+metrics on by default, so they are already running before anyone opens this
+screen. A screen that asked "may we?" would be asking about something that had
+already happened, which is the failure this ADR was written to avoid in the
+first place.
 
-**Highlight opt out instead.** Rejected. Most people take the highlighted
-answer, and a product that wants to know which rules fire needs enough installs
-answering yes for the number to mean anything. The screen states every event
-before the cursor gets there, so the person taking the highlighted answer has
-read what it does.
+What is left is worth more than a question: disclosure that arrives before the
+user has anything to regret, and an off switch in the same breath. The screen
+therefore states every event and every field first, and offers the switch
+second. It never uses the words "opt in", because there is nothing to opt into.
 
-This is a different question from the one above and is not settled by the same
-paragraphs. A pre-selected answer is not consent by itself: *Planet49*
-C-673/17 held a pre-ticked box invalid, and it is the same case cited above for
-anonymity. What distinguishes this screen is that nothing proceeds until the
-person presses a key, so the selection is a highlight rather than a completed
-answer. That is a real distinction and it is arguable rather than safe.
-Confidence that a regulator would accept it: moderate. The design is built so
-that losing the argument costs one character, because the default lives in the
-screen and not in the CLI.
+**Say nothing and leave it to the README.** Rejected. The README is read by
+people evaluating the tool, not by people running it, and a default that only
+appears in a document nobody opens is a default nobody can find. ADR-0039
+requires that a user be able to disable telemetry before normal use; this screen
+is how that requirement is met for the plugin.
 
-The clause that carries the risk is the one that must not move: absence of an
-answer is `off`. A machine that never ran the welcome sends nothing. Whoever
-revisits this should change the highlight before changing that.
+**Highlight turning it off.** Rejected. Most people take the highlighted answer,
+and a product that wants to know which rules fire needs enough installs
+reporting for the numbers to mean anything. The screen states every event and
+every field above the cursor, so whoever takes the highlight has read what it
+does.
 
 **One last event recording the opt-out.** Rejected: it is a transmission from
 someone who has just said stop transmitting, and no wording makes it read
@@ -182,8 +176,8 @@ terminal with a prompt gutter.
   paths or repo names. We only publish those counters and that
   metadata, so we know the tool works.
 
-  > Opt in    Send those                        (default)
-    Opt out   Send nothing
+  > Keep it on    Publish those                 (default)
+    Turn it off   Publish nothing
 
   Read back anything sent:  stacktrace telemetry show
 ```
@@ -262,10 +256,8 @@ specifies the file, the cap and the format.
 
 ### Where the preference lives
 
-Not here. The welcome screen runs `stacktrace telemetry on` or
-`stacktrace telemetry off`, and the CLI owns the setting, in the same idiom
-ADR-0005 already uses for Slack, where the welcome runs `stacktrace slack
-connect` rather than writing a credential.
+Not here. The welcome screen runs `stacktrace telemetry off` when someone asks
+for that, and the CLI owns the setting.
 
 The CLI has to own it because the CLI sends the events and runs without this
 plugin. A preference in `~/.claude/stacktrace-plugin.json` would be read by
@@ -274,20 +266,22 @@ setting is a second answer to the same question.
 
 `scripts/preferences.py` gains no key.
 
-### The highlight is not the stored default
+### What the screen can and cannot change
 
-Two different defaults, and conflating them is the mistake this section exists
-to prevent.
-
-| | Default | Why |
+| | Value | Owned by |
 | --- | --- | --- |
-| The screen's cursor | opt in | most people take the highlighted answer, and the events are stated above it |
-| A missing settings file | `off` | nobody answered, and silence is not consent |
+| A missing settings file | `on` | the CLI, ADR-0039 |
+| Unreadable or invalid settings | `off` | the CLI, ADR-0039 |
+| The screen's cursor | keep it on | this ADR |
 
-Someone who installs the CLI and never runs `/stacktrace:welcome` sends
-nothing, forever, with no prompt and no flag. That is the clause Article 5(3)
-actually turns on. The highlight only moves the cursor for a person looking at
-a screen that has already told them what it will send.
+The screen changes the cursor and nothing else. It does not decide the default,
+it reports it. Someone who installs the CLI and never runs
+`/stacktrace:welcome` is already sending, which is exactly why the screen leads
+with the list rather than with the question.
+
+The second row is the one to leave alone. A preference that cannot be read
+resolves to `off` rather than to the default, so a corrupted file can never
+re-enable what somebody turned off.
 
 ## Consequences
 
@@ -304,15 +298,17 @@ price of seeing a finding land on the day it fires, it was taken deliberately,
 and `session_started` is the event that carries it. Dropping that one event
 removes the profile and keeps the finding signal.
 
-The welcome now depends on the CLI for the setting as well as for Slack. The
-screen already refuses to run without the CLI, so the failure stays in one
-place.
+The welcome depends on the CLI for the setting. It already refuses to run
+without the CLI, so the failure stays in one place.
 
-Opt in is the highlighted answer, so the data will describe people who saw the
-screen and did not move off it. That is a larger and less self-selected group
-than an opt-out default would produce, and it is still not everyone: an install
-that never runs the welcome is absent entirely. Any decision made from the data
-has to say which population it rests on.
+The data describes everyone who did not turn it off, including people who never
+opened this screen. That is a larger and less self-selected sample than an
+opt-in default would produce, and it moves the obligation from consent to
+disclosure: the screen has to be findable, and it has to be true on the day it
+is read.
+
+That obligation is the reason this screen exists at all, and it is also its
+weakest point. Nothing makes a person run `/stacktrace:welcome`.
 
 ## Open issues
 
