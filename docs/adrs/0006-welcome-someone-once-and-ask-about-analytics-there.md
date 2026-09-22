@@ -143,9 +143,19 @@ its own reading of a conversation.
 ### Showing it once, without being asked
 
 `scripts/session_start.sh` looks for `~/.claude/stacktrace-welcomed`. When it is
-absent, the hook creates it and appends one instruction to `additionalContext`
-asking the model to run the welcome before anything else. When it is present the
-hook emits the monitor contract alone.
+absent, the hook creates it and returns the screen as `systemMessage`, which
+Claude Code shows to the user at session start with no prompt and without the
+model. When it is present the hook emits the monitor contract alone.
+
+`additionalContext` was the first attempt and could not work. It reaches the
+model, and the model says nothing until the user does, so the screen appeared
+nowhere at start. It also asked the model to run `/stacktrace:welcome`, which
+sets `disable-model-invocation: true` and is therefore closed to it.
+
+The hook reads the screen out of `skills/welcome/SKILL.md` rather than carrying
+a copy. A startup message cannot take an answer, so the hook replaces the two
+option lines with the off command. `/stacktrace:welcome` still shows the full
+screen and asks the question when someone runs it.
 
 The marker is written *before* the screen is shown, not after. A crash between
 the two costs one welcome. The other order costs a welcome on every session
@@ -203,7 +213,7 @@ terminal with a prompt gutter.
   > Keep it on    Publish those                 (default)
     Turn it off   Publish nothing
 
-  Read back anything sent:  stacktrace telemetry show
+  See exactly what can be sent:  stacktrace telemetry show
 ```
 
 ### The wordmark
