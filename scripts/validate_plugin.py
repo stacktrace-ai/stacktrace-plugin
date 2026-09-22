@@ -37,7 +37,10 @@ def main() -> int:
     if not isinstance(manifest, dict) or manifest.get("name") != "stacktrace":
         fail("plugin manifest must name stacktrace")
     version = manifest.get("version")
-    if not isinstance(version, str) or not re.fullmatch(r"\d+\.\d+\.\d+", version):
+    semver_number = r"(?:0|[1-9]\d*)"
+    if not isinstance(version, str) or not re.fullmatch(
+        rf"{semver_number}\.{semver_number}\.{semver_number}", version
+    ):
         fail("plugin manifest must carry a semver version; bump it on every release "
              "or installed copies never see the change")
     if manifest.get("experimental") != {"monitors": "./monitors/monitors.json"}:

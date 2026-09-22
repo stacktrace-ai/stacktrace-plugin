@@ -44,6 +44,33 @@ class PluginContractTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout, "plugin scaffold ok\n")
 
+    def _run_validator_with_version(self, version: str) -> subprocess.CompletedProcess[str]:
+        with tempfile.TemporaryDirectory(prefix="stacktrace-plugin-scaffold-") as scaffold:
+            shutil.copytree(ROOT, scaffold, dirs_exist_ok=True, ignore=shutil.ignore_patterns(".git"))
+            manifest_path = Path(scaffold, ".claude-plugin", "plugin.json")
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["version"] = version
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+            return subprocess.run(
+                [sys.executable, str(Path(scaffold, "scripts", "validate_plugin.py"))],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+
+    def test_validator_rejects_leading_zeroes_in_version(self) -> None:
+        for version in ("01.0.0", "1.02.3", "1.2.03"):
+            with self.subTest(version=version):
+                result = self._run_validator_with_version(version)
+                self.assertEqual(result.returncode, 1)
+                self.assertIn("semver version", result.stderr)
+
+    def test_validator_accepts_compliant_versions(self) -> None:
+        for version in ("0.1.0", "1.2.3", "10.20.30"):
+            with self.subTest(version=version):
+                result = self._run_validator_with_version(version)
+                self.assertEqual(result.returncode, 0, result.stderr)
+
     @classmethod
     def _path_without_stacktrace(cls) -> str:
         """A PATH holding only what the hook needs and no `stacktrace`. Built
