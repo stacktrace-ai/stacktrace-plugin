@@ -31,7 +31,7 @@ A developer installs the plugin, relaunches, and runs `/stacktrace:welcome`.
 They see what will be detected, what is sent if they opt in, and they answer one
 question.
 
-A developer who wants none of it takes the default and is not asked again.
+A developer who wants none of it moves one line down and is not asked again.
 
 A developer reading the output with `NO_COLOR` set gets the same words with no
 glyphs.
@@ -51,8 +51,8 @@ It states what is detected as it is on the day it runs.
 It names every event before asking about any of them, and says plainly that a
 finding's content is never among them.
 
-It asks once, records the answer, and never asks again. The default sends
-nothing.
+It asks once, records the answer, and never asks again. Opt in is the
+highlighted answer and a keystroke is still required to take it.
 
 It is a screen, not a wizard. No progress bar, no multi-step flow, no waiting on
 the network.
@@ -68,16 +68,36 @@ of the day is also the thing people disable.
 working", which someone runs when it is not. The welcome answers "what is this",
 asked at a different time, and merging them makes the failure path longer.
 
-**Default on, with an opt-out.** Rejected on law. ePrivacy Directive Article
-5(3) requires consent before storing or accessing information on a user's
-terminal equipment. EDPB Guidelines 2/2023, adopted 7 October 2024, closes each
-exit: paragraph 6, the trigger is "information" rather than personal data, so
-anonymity is irrelevant; paragraph 36, the scope includes "customized software",
-so not being a browser does not help; paragraph 53, *"The fact that this
-information is being produced locally does not preclude the application of
-Article 5(3) ePD"*, which defeats the argument that counts computed here are
-ours to send. France permits a narrow exemption under CNIL Sheet n°16 on seven
-cumulative conditions. The UK ICO requires consent.
+**Send without asking, with an opt-out flag somewhere.** Rejected on law.
+ePrivacy Directive Article 5(3) requires consent before storing or accessing
+information on a user's terminal equipment. EDPB Guidelines 2/2023, adopted 7
+October 2024, closes each exit: paragraph 6, the trigger is "information" rather
+than personal data, so anonymity is irrelevant; paragraph 36, the scope includes
+"customized software", so not being a browser does not help; paragraph 53, *"The
+fact that this information is being produced locally does not preclude the
+application of Article 5(3) ePD"*, which defeats the argument that counts
+computed here are ours to send. France permits a narrow exemption under CNIL
+Sheet n°16 on seven cumulative conditions. The UK ICO requires consent.
+
+**Highlight opt out instead.** Rejected. Most people take the highlighted
+answer, and a product that wants to know which rules fire needs enough installs
+answering yes for the number to mean anything. The screen states every event
+before the cursor gets there, so the person taking the highlighted answer has
+read what it does.
+
+This is a different question from the one above and is not settled by the same
+paragraphs. A pre-selected answer is not consent by itself: *Planet49*
+C-673/17 held a pre-ticked box invalid, and it is the same case cited above for
+anonymity. What distinguishes this screen is that nothing proceeds until the
+person presses a key, so the selection is a highlight rather than a completed
+answer. That is a real distinction and it is arguable rather than safe.
+Confidence that a regulator would accept it: moderate. The design is built so
+that losing the argument costs one character, because the default lives in the
+screen and not in the CLI.
+
+The clause that carries the risk is the one that must not move: absence of an
+answer is `off`. A machine that never ran the welcome sends nothing. Whoever
+revisits this should change the highlight before changing that.
 
 **One last event recording the opt-out.** Rejected: it is a transmission from
 someone who has just said stop transmitting, and no wording makes it read
@@ -154,21 +174,16 @@ terminal with a prompt gutter.
 
   USAGE
 
-  Opt in and we send four events as they happen: that you
-  installed, that a session started, that a finding was
-  delivered and which one it was, and the type of any error.
+  Four events, as they happen: you installed, a session started,
+  a finding was delivered and which one, an error and its type.
 
-  The finding itself is never sent. We count that one was
-  delivered, which is how we tell the tool is working.
+  Never the finding itself, a prompt, a file, a path or a repo
+  name. Only that something fired, so we know the tool works.
 
-  Nothing else leaves this machine. Not a prompt, a file, a path,
-  a repo name, a command you ran or the text of a finding.
+  > Opt in    Send those four                        (default)
+    Opt out   Send nothing
 
-  > Opt out   Nothing is sent                        (default)
-    Opt in    The four events above, as they happen
-
-  Everything we send is also written down here, so you can read
-  it back at any time:  stacktrace telemetry show
+  Read back anything sent:  stacktrace telemetry show
 ```
 
 ### The wordmark
@@ -257,6 +272,21 @@ setting is a second answer to the same question.
 
 `scripts/preferences.py` gains no key.
 
+### The highlight is not the stored default
+
+Two different defaults, and conflating them is the mistake this section exists
+to prevent.
+
+| | Default | Why |
+| --- | --- | --- |
+| The screen's cursor | opt in | most people take the highlighted answer, and the events are stated above it |
+| A missing settings file | `off` | nobody answered, and silence is not consent |
+
+Someone who installs the CLI and never runs `/stacktrace:welcome` sends
+nothing, forever, with no prompt and no flag. That is the clause Article 5(3)
+actually turns on. The highlight only moves the cursor for a person who is looking at a
+screen that has already told them what it will send.
+
 ## Consequences
 
 A person can answer "what does it do" from one screen, and a security reviewer
@@ -276,9 +306,11 @@ The welcome now depends on the CLI for the setting as well as for Slack. The
 screen already refuses to run without the CLI, so the failure stays in one
 place.
 
-Opting out is the default, so most installs will send nothing and the data will
-describe the people who chose to be described. Any decision made from it has to
-say so.
+Opt in is the highlighted answer, so the data will describe people who saw the
+screen and did not move off it. That is a larger and less self-selected group
+than an opt-out default would produce, and it is still not everyone: an install
+that never runs the welcome is absent entirely. Any decision made from the data
+has to say which population it rests on.
 
 ## Open issues
 
