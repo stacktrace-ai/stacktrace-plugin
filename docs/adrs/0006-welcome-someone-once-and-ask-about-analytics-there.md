@@ -154,11 +154,10 @@ terminal with a prompt gutter.
   └─┐ │ ├─┤│  ├┴┐ │ ├┬┘├─┤│  ├┤ 
   └─┘ ┴ ┴ ┴└─┘┴ ┴ ┴ ┴└─┴ ┴└─┘└─┘
 
-  Watches what your coding agent actually did, and tells you
-  when something needs you.
+  we watch your agents, so you don't have to
 
 
-  WHAT GETS DETECTED
+  DETECTION POLICIES
 
   credential-egress
     Credential-shaped material reached an outbound call.
@@ -172,15 +171,15 @@ terminal with a prompt gutter.
       provider_throttled  Too many requests, too quickly.
 
 
-  USAGE
+  USAGE METRICS
 
-  Four events, as they happen: you installed, a session started,
-  a finding was delivered and which one, an error and its type.
+  We publish 4 events, as they happen: you installed, a session started,
+  a finding was delivered, an error and its type.
 
-  Never the finding itself, a prompt, a file, a path or a repo
-  name. Only that something fired, so we know the tool works.
+  We NEVER publish the finding itself, or any prompts, file names, paths or repo
+  names. We only publish counters, so we know the tool works.
 
-  > Opt in    Send those four                        (default)
+  > Opt in    Send counters                        (default)
     Opt out   Send nothing
 
   Read back anything sent:  stacktrace telemetry show
