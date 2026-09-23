@@ -58,6 +58,7 @@ class PluginContractTests(unittest.TestCase):
         path = cls._path_without_stacktrace() if no_stacktrace else f"{cls._bindir.name}:{os.environ['PATH']}"
         environment = dict(os.environ, HOME=home, PATH=path)
         environment.pop("CLAUDE_CONFIG_DIR", None)
+        environment.pop("CLAUDE_PLUGIN_DATA", None)
         environment.pop("NO_COLOR", None)
         return environment
 
@@ -96,31 +97,51 @@ class PluginContractTests(unittest.TestCase):
             first = json.loads(self._session_start(home).stdout)
             second = json.loads(self._session_start(home).stdout)
 
-        self.assertIn("DETECTION POLICIES", first["systemMessage"])
+        self.assertIn("WHAT WE DETECT", first["systemMessage"])
         self.assertNotIn("systemMessage", second)
         for document in (first, second):
             context = document["hookSpecificOutput"]["additionalContext"]
             self.assertIn("STACKTRACE_NOTIFY_V1", context)
 
-    def test_the_startup_screen_is_the_skill_screen_without_the_question(self) -> None:
-        """One copy of the screen, read out of the skill. A startup message
-        cannot take an answer, so the option cursor becomes the off command
-        and every other line is the skill's, in order."""
+    def test_the_startup_screen_is_the_skill_screen(self) -> None:
+        """One copy of the screen, read out of the skill, line for line. It
+        carries no option cursor, so a startup message that cannot take an
+        answer shows exactly what `/stacktrace:config` shows."""
         with tempfile.TemporaryDirectory() as home:
             shown = json.loads(self._session_start(home).stdout)["systemMessage"]
-        skill = (ROOT / "skills" / "welcome" / "SKILL.md").read_text(encoding="utf-8")
-        expected = [
-            line
-            for line in WelcomeScreenTests._screen(skill).split("\n")
-            if not line.startswith(("  > Keep it on", "    Turn it off"))
-        ]
+        skill = (ROOT / "skills" / "config" / "SKILL.md").read_text(encoding="utf-8")
 
-        self.assertNotIn("Keep it on", shown)
+        self.assertEqual(shown, WelcomeScreenTests._screen(skill))
         self.assertIn("stacktrace telemetry off", shown)
-        self.assertEqual(
-            [line for line in shown.split("\n") if "Turn it off at any time" not in line],
-            expected,
-        )
+        self.assertIn("/stacktrace:config", shown)
+
+    def test_the_marker_lives_in_the_plugin_data_directory(self) -> None:
+        """Claude Code deletes `CLAUDE_PLUGIN_DATA` when the plugin is
+        uninstalled, so a reinstall welcomes again. A marker in the config
+        directory survived every reinstall (ADR-0007)."""
+        with tempfile.TemporaryDirectory() as home, tempfile.TemporaryDirectory() as data:
+            environment = self._environment(home)
+            environment["CLAUDE_PLUGIN_DATA"] = str(Path(data, "stacktrace-stacktrace"))
+
+            def start() -> dict[str, object]:
+                return json.loads(
+                    subprocess.run(
+                        ["sh", str(ROOT / "scripts" / "session_start.sh")],
+                        check=True,
+                        capture_output=True,
+                        text=True,
+                        input="{}",
+                        env=environment,
+                    ).stdout
+                )
+
+            first = start()
+            self.assertTrue(Path(data, "stacktrace-stacktrace", "stacktrace-welcomed").exists())
+            self.assertFalse(Path(home, ".claude", "stacktrace-welcomed").exists())
+            second = start()
+
+        self.assertIn("systemMessage", first)
+        self.assertNotIn("systemMessage", second)
 
     def test_the_model_is_never_asked_to_run_the_welcome(self) -> None:
         """The skill sets `disable-model-invocation: true`, so an instruction
@@ -131,7 +152,7 @@ class PluginContractTests(unittest.TestCase):
                 "additionalContext"
             ]
 
-        self.assertNotIn("/stacktrace:welcome", context)
+        self.assertNotIn("/stacktrace:config", context)
 
     def test_the_welcome_waits_for_the_cli(self) -> None:
         """The skill's own step 1 refuses to print the screen before the CLI
@@ -154,7 +175,7 @@ class PluginContractTests(unittest.TestCase):
 
             after = json.loads(self._session_start(home).stdout)
 
-        self.assertIn("DETECTION POLICIES", after["systemMessage"])
+        self.assertIn("WHAT WE DETECT", after["systemMessage"])
 
     def test_no_color_replaces_the_wordmark_with_the_word(self) -> None:
         """The skill tells whoever prints the screen to swap the wordmark for
@@ -176,7 +197,7 @@ class PluginContractTests(unittest.TestCase):
         self.assertIn("STACKTRACE", shown.split("\n")[0])
         for glyph in "┌└├┴┬┤":
             self.assertNotIn(glyph, shown)
-        self.assertIn("DETECTION POLICIES", shown)
+        self.assertIn("WHAT WE DETECT", shown)
 
     def test_an_unwritable_marker_costs_the_welcome_and_not_the_session(self) -> None:
         """The contract is the hook's job; the welcome is a bonus. A read-only
@@ -212,7 +233,7 @@ class WelcomeScreenTests(unittest.TestCase):
     @staticmethod
     def _screen(text: str) -> str:
         blocks = re.findall(r"```\n(.*?)```", text, re.S)
-        matching = [block for block in blocks if "DETECTION POLICIES" in block]
+        matching = [block for block in blocks if "WHAT WE DETECT" in block]
         assert len(matching) == 1, f"expected one screen, found {len(matching)}"
         return matching[0]
 
@@ -221,16 +242,16 @@ class WelcomeScreenTests(unittest.TestCase):
         the ADR is what review reads and the skill is what a user sees."""
         adr = (
             ROOT / "docs" / "adrs"
-            / "0006-welcome-someone-once-and-ask-about-analytics-there.md"
+            / "0007-name-the-welcome-config-and-forget-it-on-uninstall.md"
         ).read_text(encoding="utf-8")
-        skill = (ROOT / "skills" / "welcome" / "SKILL.md").read_text(encoding="utf-8")
+        skill = (ROOT / "skills" / "config" / "SKILL.md").read_text(encoding="utf-8")
 
         self.assertEqual(self._screen(skill), self._screen(adr))
 
     def test_the_wordmark_rows_are_the_same_width(self) -> None:
         """Row two ends in a trailing space. Without it the `E` sits a column
         short, and every editor that strips trailing whitespace breaks it."""
-        skill = (ROOT / "skills" / "welcome" / "SKILL.md").read_text(encoding="utf-8")
+        skill = (ROOT / "skills" / "config" / "SKILL.md").read_text(encoding="utf-8")
         rows = [
             line for line in self._screen(skill).split("\n")
             if any(glyph in line for glyph in "\u250c\u2514\u251c\u2534\u252c\u2524")
@@ -240,7 +261,7 @@ class WelcomeScreenTests(unittest.TestCase):
         self.assertEqual({len(row) for row in rows}, {32})
 
     def test_the_screen_fits_an_eighty_column_terminal(self) -> None:
-        skill = (ROOT / "skills" / "welcome" / "SKILL.md").read_text(encoding="utf-8")
+        skill = (ROOT / "skills" / "config" / "SKILL.md").read_text(encoding="utf-8")
         too_wide = [line for line in self._screen(skill).split("\n") if len(line) > 72]
 
         self.assertEqual(too_wide, [])
@@ -248,7 +269,7 @@ class WelcomeScreenTests(unittest.TestCase):
     def test_the_welcome_never_says_opt_in(self) -> None:
         """Usage metrics are on before the screen appears (ADR-0039), so there
         is nothing to opt into and saying so would be untrue."""
-        skill = (ROOT / "skills" / "welcome" / "SKILL.md").read_text(encoding="utf-8")
+        skill = (ROOT / "skills" / "config" / "SKILL.md").read_text(encoding="utf-8")
 
         self.assertNotIn("opt in", self._screen(skill).lower())
 

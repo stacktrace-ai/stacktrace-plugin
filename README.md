@@ -44,7 +44,7 @@ The available workflows are:
 
 ```text
 /stacktrace:configure
-/stacktrace:welcome
+/stacktrace:config
 /stacktrace:status
 /stacktrace:findings
 ```

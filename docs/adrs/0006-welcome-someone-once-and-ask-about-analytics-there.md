@@ -5,6 +5,7 @@ status: accepted
 date: 2026-09-21
 supersedes: null
 superseded-by: null
+amended-by: 0007
 ---
 
 Subsystem: the agent plugin. The CLI half, which sends the events, is
