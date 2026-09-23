@@ -71,7 +71,7 @@ def main() -> int:
     if handler != expected_handler:
         fail("SessionStart must invoke only the notification guidance script")
 
-    expected_skills = {"config", "configure", "findings", "status"}
+    expected_skills = {"configure", "findings", "status"}
     skills_root = ROOT / "skills"
     observed_skills = {
         path.name

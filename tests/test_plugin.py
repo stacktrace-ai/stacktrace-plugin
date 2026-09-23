@@ -10,6 +10,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+WELCOME = ROOT / "scripts" / "welcome.txt"
 
 
 class PluginContractTests(unittest.TestCase):
@@ -103,17 +104,13 @@ class PluginContractTests(unittest.TestCase):
             context = document["hookSpecificOutput"]["additionalContext"]
             self.assertIn("STACKTRACE_NOTIFY_V1", context)
 
-    def test_the_startup_screen_is_the_skill_screen(self) -> None:
-        """One copy of the screen, read out of the skill, line for line. It
-        carries no option cursor, so a startup message that cannot take an
-        answer shows exactly what `/stacktrace:config` shows."""
+    def test_the_startup_screen_is_the_welcome_file(self) -> None:
+        """One copy of the screen, shown line for line."""
         with tempfile.TemporaryDirectory() as home:
             shown = json.loads(self._session_start(home).stdout)["systemMessage"]
-        skill = (ROOT / "skills" / "config" / "SKILL.md").read_text(encoding="utf-8")
 
-        self.assertEqual(shown, WelcomeScreenTests._screen(skill))
+        self.assertEqual(shown, WELCOME.read_text(encoding="utf-8"))
         self.assertIn("stacktrace telemetry off", shown)
-        self.assertIn("/stacktrace:config", shown)
 
     def test_the_marker_lives_in_the_plugin_data_directory(self) -> None:
         """Claude Code deletes `CLAUDE_PLUGIN_DATA` when the plugin is
@@ -144,21 +141,20 @@ class PluginContractTests(unittest.TestCase):
         self.assertNotIn("systemMessage", second)
 
     def test_the_model_is_never_asked_to_run_the_welcome(self) -> None:
-        """The skill sets `disable-model-invocation: true`, so an instruction
-        to run it is one the model cannot follow. The first version gave that
-        instruction, and the welcome never appeared."""
+        """The first version asked the model to run a welcome skill it could
+        not invoke, and the welcome never appeared. The screen goes to the
+        user directly, and the model is told nothing about it."""
         with tempfile.TemporaryDirectory() as home:
             context = json.loads(self._session_start(home).stdout)["hookSpecificOutput"][
                 "additionalContext"
             ]
 
-        self.assertNotIn("/stacktrace:config", context)
+        self.assertNotIn("WHAT WE DETECT", context)
 
     def test_the_welcome_waits_for_the_cli(self) -> None:
-        """The skill's own step 1 refuses to print the screen before the CLI
-        exists, because every claim on it is about a program that has to
-        already run. The hook has to refuse too, and it must not spend the
-        one-time marker on a screen it never showed."""
+        """Every claim on the screen is about a program that has to already
+        run, so the hook refuses to show it before the CLI exists, and must
+        not spend the one-time marker on a screen it never showed."""
         with tempfile.TemporaryDirectory() as home:
             before = json.loads(
                 subprocess.run(
@@ -178,9 +174,7 @@ class PluginContractTests(unittest.TestCase):
         self.assertIn("WHAT WE DETECT", after["systemMessage"])
 
     def test_no_color_replaces_the_wordmark_with_the_word(self) -> None:
-        """The skill tells whoever prints the screen to swap the wordmark for
-        the word under NO_COLOR, but the hook shows the screen without a model
-        in the loop to read that instruction, so it has to do the swap itself."""
+        """Under NO_COLOR the wordmark becomes the word."""
         with tempfile.TemporaryDirectory() as home:
             environment = self._environment(home)
             environment["NO_COLOR"] = "1"
@@ -237,23 +231,23 @@ class WelcomeScreenTests(unittest.TestCase):
         assert len(matching) == 1, f"expected one screen, found {len(matching)}"
         return matching[0]
 
-    def test_the_skill_prints_the_screen_the_adr_specifies(self) -> None:
+    def test_the_welcome_is_the_screen_the_adr_specifies(self) -> None:
         """Two copies of the same screen drift, and the drift is invisible:
-        the ADR is what review reads and the skill is what a user sees."""
+        the ADR is what review reads and the file is what a user sees."""
         adr = (
             ROOT / "docs" / "adrs"
-            / "0007-name-the-welcome-config-and-forget-it-on-uninstall.md"
+            / "0007-show-the-welcome-once-at-start-and-forget-it-on-uninstall.md"
         ).read_text(encoding="utf-8")
-        skill = (ROOT / "skills" / "config" / "SKILL.md").read_text(encoding="utf-8")
+        skill = WELCOME.read_text(encoding="utf-8")
 
-        self.assertEqual(self._screen(skill), self._screen(adr))
+        self.assertEqual(skill, self._screen(adr))
 
     def test_the_wordmark_rows_are_the_same_width(self) -> None:
         """Row two ends in a trailing space. Without it the `E` sits a column
         short, and every editor that strips trailing whitespace breaks it."""
-        skill = (ROOT / "skills" / "config" / "SKILL.md").read_text(encoding="utf-8")
+        skill = WELCOME.read_text(encoding="utf-8")
         rows = [
-            line for line in self._screen(skill).split("\n")
+            line for line in skill.split("\n")
             if any(glyph in line for glyph in "\u250c\u2514\u251c\u2534\u252c\u2524")
         ][:3]
 
@@ -261,17 +255,17 @@ class WelcomeScreenTests(unittest.TestCase):
         self.assertEqual({len(row) for row in rows}, {32})
 
     def test_the_screen_fits_an_eighty_column_terminal(self) -> None:
-        skill = (ROOT / "skills" / "config" / "SKILL.md").read_text(encoding="utf-8")
-        too_wide = [line for line in self._screen(skill).split("\n") if len(line) > 72]
+        skill = WELCOME.read_text(encoding="utf-8")
+        too_wide = [line for line in skill.split("\n") if len(line) > 72]
 
         self.assertEqual(too_wide, [])
 
     def test_the_welcome_never_says_opt_in(self) -> None:
-        """Usage metrics are on before the screen appears (ADR-0039), so there
+        """Usage metrics are on before the screen appears (stacktrace ADR-0039), so there
         is nothing to opt into and saying so would be untrue."""
-        skill = (ROOT / "skills" / "config" / "SKILL.md").read_text(encoding="utf-8")
+        skill = WELCOME.read_text(encoding="utf-8")
 
-        self.assertNotIn("opt in", self._screen(skill).lower())
+        self.assertNotIn("opt in", skill.lower())
 
 
 if __name__ == "__main__":
