@@ -351,7 +351,7 @@ manager or a separate supervisor.
 
 | Failure | Required behavior |
 | --- | --- |
-| Daemon is not running | `subscribe` starts it idempotently, protected by a per-user singleton lock. |
+| Daemon is not running | `subscribe` does not start it (ADR-0008); the monitor fails to connect and the `SessionStart` hook reports the daemon socket is absent, naming `stacktrace daemon start`. |
 | Monitor cannot connect | Retry with backoff; put diagnostics on stderr, never stdout. |
 | Monitor disconnects | Retain unacknowledged events for that session. |
 | Daemon restarts | Reload durable cursors and delivery state; subscribers reconnect. |
