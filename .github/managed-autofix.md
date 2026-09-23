@@ -12,7 +12,7 @@ per-head Codex review marker.
 | --- | --- |
 | Routine | [trig_01JijKAzDwe3KYKEReBWkdkd](https://claude.ai/code/routines/trig_01JijKAzDwe3KYKEReBWkdkd), Anthropic-hosted Default environment (`env_01F2vbHGYXjLs9PV3hzvbvCX`), claude-sonnet-5, sole source this repository, no connectors |
 | Triggers | GitHub `pull_request.opened` and `pull_request.ready_for_review` (ids `294e66bb-0960-4f7a-9b74-f7b683bbad36` opened (2026-09-18), `11ef5696-f190-45d9-b567-0e7941de2455` ready_for_review (2026-09-23)); a draft PR enrolls when marked ready. Automatic enrollment: verified: PR #17 (opened 2026-09-22) was enrolled and fixed by a cloud session over three Codex rounds under the previous prompt |
-| Prompt source | SHA-256 of the fenced block below: `8636560ca4f372bdf43f25b809a1e82a432df1e0a1a285aa0797defb91a8d447`; saved on the routine 2026-09-23T06:39:27Z, read back byte-identical |
+| Prompt source | SHA-256 of the fenced block below: `632a79e1b3b298353c563c2c2c3adc8e4d3338f857552419b24381c91b837106`. **Not yet deployed** — the routine's saved prompt still hashes to `8636560ca4f372bdf43f25b809a1e82a432df1e0a1a285aa0797defb91a8d447` (saved 2026-09-23T06:39:27Z), which lacks this file's `DISMISSED`-exclusion fix. Update the routine, read the prompt back, and confirm byte-identical before relying on the fix |
 | Codex review | Codex reviews this repository's PRs (observed on #13, #17); confirm all-PRs/every-push in the Codex console |
 | Legacy Actions loop | none; this repository never had review/fix Actions workflows |
 
@@ -46,7 +46,8 @@ missing capability and stop.
 On enrollment and every wake, read the current head SHA. Edit only when one of
 these authorizes the current head:
 
-- A completed review from chatgpt-codex-connector[bot] or a trusted maintainer.
+- A completed review (state `COMMENTED`, `CHANGES_REQUESTED`, or `APPROVED`,
+  never `DISMISSED`) from chatgpt-codex-connector[bot] or a trusted maintainer.
 - A required CI check failed with an established, code-related cause.
 - A trusted maintainer explicitly approved a reported P3 finding for the
   current head, as CLAUDE.md requires.
