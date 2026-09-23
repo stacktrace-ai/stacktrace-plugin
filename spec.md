@@ -286,8 +286,7 @@ Owns only Claude-specific integration:
 
 - the session-lifetime `stacktrace-alerts` monitor declaration;
 - the `SessionStart` notification behavior instruction;
-- `/stacktrace:configure`, `/stacktrace:status`, and
-  `/stacktrace:findings` user workflows; and
+- `/stacktrace:status` and `/stacktrace:findings` user workflows; and
 - translation between daemon notification events and Claude-native UX.
 
 The plugin does not contain parsing, detection, policy, persistence, or daemon
@@ -297,12 +296,15 @@ supervision logic.
 
 ### First installation
 
-1. The user installs the Stacktrace plugin.
-2. `/stacktrace:configure` verifies or installs the compatible Stacktrace CLI,
-   creates local configuration, verifies daemon startup, and probes that the
-   host Claude Code version supports the monitor declaration,
-   `CLAUDE_CODE_SESSION_ID`, and `PushNotification`.
-3. The next Claude session automatically starts the plugin monitor.
+1. The user installs the Stacktrace plugin and a compatible Stacktrace CLI;
+   installing the CLI is the user's or the environment's job, not the
+   plugin's (ADR-0008).
+2. The next Claude session automatically starts the plugin monitor. If a
+   prerequisite is missing, the `SessionStart` hook reports it and names the
+   command that resolves it; `/stacktrace:status` gives the deeper ordered
+   diagnosis, including whether the host Claude Code version supports the
+   monitor declaration, `CLAUDE_CODE_SESSION_ID`, and `PushNotification`.
+   Neither runs a mutating command.
 
 The MVP does not require Slack or Fleet configuration.
 
@@ -360,7 +362,7 @@ manager or a separate supervisor.
 | A notification-worthy finding is produced during the post-disconnect final drain | No live monitor subscriber exists to deliver it; route it through the model-independent notification Adapter rather than holding it for an improbable resume of that exact session ID. |
 | Socket path exists but no daemon responds | Verify ownership and liveness before removing the stale socket. |
 | Protocol versions are incompatible | Fail closed with a concise upgrade instruction on stderr. |
-| Host Claude Code version lacks the monitor declaration, `CLAUDE_CODE_SESSION_ID`, or `PushNotification` | `/stacktrace:configure` fails closed with an actionable upgrade message instead of reporting success. |
+| Host Claude Code version lacks the monitor declaration, `CLAUDE_CODE_SESSION_ID`, or `PushNotification` | `/stacktrace:status` fails closed with an actionable upgrade message instead of reporting success. |
 
 ## Security and privacy
 
