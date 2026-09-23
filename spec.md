@@ -119,9 +119,11 @@ The intended command surface is deliberately small:
 stacktrace daemon subscribe --agent-kind claude-code
 ```
 
-The command reads the session ID from the host environment, ensures the
-per-user daemon is running, connects, subscribes, and relays eligible events.
-It emits operational logs to stderr. Its stdout is reserved exclusively for
+The command reads the session ID from the host environment, connects to the
+already-running per-user daemon, subscribes, and relays eligible events. It
+does not start the daemon: `stacktrace-plugin` ADR-0008 assigns daemon
+startup to the host or the user, never to the plugin or its monitor. It
+emits operational logs to stderr. Its stdout is reserved exclusively for
 events Claude should process.
 
 A single host commonly has many concurrent `session_id`s: one per active
@@ -284,8 +286,7 @@ Owns only Claude-specific integration:
 
 - the session-lifetime `stacktrace-alerts` monitor declaration;
 - the `SessionStart` notification behavior instruction;
-- `/stacktrace:configure`, `/stacktrace:status`, and
-  `/stacktrace:findings` user workflows; and
+- `/stacktrace:status` and `/stacktrace:findings` user workflows; and
 - translation between daemon notification events and Claude-native UX.
 
 The plugin does not contain parsing, detection, policy, persistence, or daemon
@@ -295,12 +296,15 @@ supervision logic.
 
 ### First installation
 
-1. The user installs the Stacktrace plugin.
-2. `/stacktrace:configure` verifies or installs the compatible Stacktrace CLI,
-   creates local configuration, verifies daemon startup, and probes that the
-   host Claude Code version supports the monitor declaration,
-   `CLAUDE_CODE_SESSION_ID`, and `PushNotification`.
-3. The next Claude session automatically starts the plugin monitor.
+1. The user installs the Stacktrace plugin and a compatible Stacktrace CLI;
+   installing the CLI is the user's or the environment's job, not the
+   plugin's (ADR-0008).
+2. The next Claude session automatically starts the plugin monitor. If a
+   prerequisite is missing, the `SessionStart` hook reports it and names the
+   command that resolves it; `/stacktrace:status` gives the deeper ordered
+   diagnosis, including whether the host Claude Code version supports the
+   monitor declaration, `CLAUDE_CODE_SESSION_ID`, and `PushNotification`.
+   Neither runs a mutating command.
 
 The MVP does not require Slack or Fleet configuration.
 
@@ -309,7 +313,9 @@ The MVP does not require Slack or Fleet configuration.
 1. Claude runs the `SessionStart` instruction hook.
 2. Claude starts the plugin monitor.
 3. The monitor reads `CLAUDE_CODE_SESSION_ID`.
-4. `stacktrace daemon subscribe` starts the daemon idempotently if necessary.
+4. `stacktrace daemon subscribe` connects to the daemon, which the host or
+   user already started (ADR-0008); the `SessionStart` hook separately
+   reports when the daemon socket is absent.
 5. The monitor opens the Unix socket and subscribes for that exact session.
 6. The daemon delivers any eligible, previously unacknowledged event for that
    session and then streams new events.
@@ -345,7 +351,7 @@ manager or a separate supervisor.
 
 | Failure | Required behavior |
 | --- | --- |
-| Daemon is not running | `subscribe` starts it idempotently, protected by a per-user singleton lock. |
+| Daemon is not running | `subscribe` does not start it (ADR-0008); the monitor fails to connect and the `SessionStart` hook reports the daemon socket is absent, naming `stacktrace daemon start`. |
 | Monitor cannot connect | Retry with backoff; put diagnostics on stderr, never stdout. |
 | Monitor disconnects | Retain unacknowledged events for that session. |
 | Daemon restarts | Reload durable cursors and delivery state; subscribers reconnect. |
@@ -356,7 +362,7 @@ manager or a separate supervisor.
 | A notification-worthy finding is produced during the post-disconnect final drain | No live monitor subscriber exists to deliver it; route it through the model-independent notification Adapter rather than holding it for an improbable resume of that exact session ID. |
 | Socket path exists but no daemon responds | Verify ownership and liveness before removing the stale socket. |
 | Protocol versions are incompatible | Fail closed with a concise upgrade instruction on stderr. |
-| Host Claude Code version lacks the monitor declaration, `CLAUDE_CODE_SESSION_ID`, or `PushNotification` | `/stacktrace:configure` fails closed with an actionable upgrade message instead of reporting success. |
+| Host Claude Code version lacks the monitor declaration, `CLAUDE_CODE_SESSION_ID`, or `PushNotification` | `/stacktrace:status` fails closed with an actionable upgrade message instead of reporting success. |
 
 ## Security and privacy
 
