@@ -40,11 +40,16 @@ the environment's setup mechanism.
 1. **Remove `skills/configure/`.** `/stacktrace:status` becomes the single
    diagnostic skill. It checks, in order: `stacktrace` is on `PATH`, the daemon
    is reachable, daemon and CLI versions agree, and the current session's
-   monitor is connected. It stops at the first failure. Missing prerequisites
+   monitor is connected. When the monitor is not connected and the earlier
+   checks are healthy, it reports whether the host Claude Code version
+   supports the monitor declaration, `CLAUDE_CODE_SESSION_ID`, and
+   `PushNotification`, so an unsupported host is diagnosed instead of read as
+   a silent disconnect. It stops at the first failure. Missing prerequisites
    name the next command: `uv tool install stacktrace-cli`,
-   `stacktrace daemon start`, or `/reload-plugins`. A version mismatch says the
-   automatic restart has not completed and asks the user to check again. The
-   skill does not offer to run a mutating command.
+   `stacktrace daemon start`, or `/reload-plugins`; an unsupported host names
+   the Claude Code upgrade instead. A version mismatch says the automatic
+   restart has not completed and asks the user to check again. The skill does
+   not offer to run a mutating command.
 2. **Report a broken prerequisite at every affected session start.** The hook
    emits one short `systemMessage` when the CLI is absent or the daemon socket
    is absent, including the relevant command. The socket test stays in shell so
