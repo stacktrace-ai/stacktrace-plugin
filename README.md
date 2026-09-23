@@ -15,7 +15,9 @@ daemon interface rather than duplicating detection logic.
 
 ## Install
 
-During early testing, install directly from this repository:
+Install from this repository's marketplace. The repository is private while
+the plugin is in closed beta, so `/plugin marketplace add` uses your own GitHub
+credentials and you need read access to it:
 
 ```text
 /plugin marketplace add stacktrace-ai/stacktrace-plugin
@@ -23,9 +25,9 @@ During early testing, install directly from this repository:
 /stacktrace:configure
 ```
 
-`/stacktrace:configure` verifies or installs the `stacktrace` CLI. After a new
-installation, run `/reload-plugins` once so Claude starts the monitor with the
-CLI available.
+`/stacktrace:configure` verifies or installs the `stacktrace` CLI, which must be
+0.4.0 or newer; it upgrades an older install. After a new installation, run
+`/reload-plugins` once so Claude starts the monitor with the CLI available.
 
 ## Automatic flow
 
@@ -59,11 +61,12 @@ Validate the repository contract and tests:
 ```bash
 python3 scripts/validate_plugin.py
 python3 -m unittest discover -s tests -v
-claude plugin validate .
+claude plugin validate --strict .
 ```
 
-The manifest intentionally omits an explicit version while the plugin is under
-active development, so Claude derives updates from the source commit. Current
-Claude releases report that choice as a non-fatal validation warning.
+The manifest carries a semver `version`, currently `0.1.0`, and `claude plugin
+validate --strict .` passes. Claude Code treats that string as the plugin's
+identity: an installed copy updates only when the version changes, so **every
+release bumps it**. `scripts/validate_plugin.py` fails a manifest without one.
 
 Review automation: [managed PR review and fixes](.github/managed-autofix.md).

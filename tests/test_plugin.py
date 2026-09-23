@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 import subprocess
 import tempfile
 import sys
@@ -19,6 +20,7 @@ class PluginContractTests(unittest.TestCase):
     one, and these tests are about the marker and screen, not that gate."""
 
     _bindir: tempfile.TemporaryDirectory[str]
+    _tooldirs: list[str] = []
 
     @classmethod
     def setUpClass(cls) -> None:
@@ -30,6 +32,8 @@ class PluginContractTests(unittest.TestCase):
     @classmethod
     def tearDownClass(cls) -> None:
         cls._bindir.cleanup()
+        for tools in cls._tooldirs:
+            shutil.rmtree(tools, ignore_errors=True)
 
     def test_validator_accepts_the_repository(self) -> None:
         result = subprocess.run(
@@ -41,14 +45,55 @@ class PluginContractTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout, "plugin scaffold ok\n")
 
+    def _run_validator_with_version(self, version: str) -> subprocess.CompletedProcess[str]:
+        with tempfile.TemporaryDirectory(prefix="stacktrace-plugin-scaffold-") as scaffold:
+            shutil.copytree(ROOT, scaffold, dirs_exist_ok=True, ignore=shutil.ignore_patterns(".git"))
+            manifest_path = Path(scaffold, ".claude-plugin", "plugin.json")
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["version"] = version
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+            return subprocess.run(
+                [sys.executable, str(Path(scaffold, "scripts", "validate_plugin.py"))],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+
+    def test_validator_rejects_leading_zeroes_in_version(self) -> None:
+        for version in ("01.0.0", "1.02.3", "1.2.03"):
+            with self.subTest(version=version):
+                result = self._run_validator_with_version(version)
+                self.assertEqual(result.returncode, 1)
+                self.assertIn("semver version", result.stderr)
+
+    def test_validator_rejects_non_ascii_digits(self) -> None:
+        for version in ("1٢2.0.0", "0.1٠2.0", "0.1.٢"):
+            with self.subTest(version=version):
+                result = self._run_validator_with_version(version)
+                self.assertEqual(result.returncode, 1)
+                self.assertIn("semver version", result.stderr)
+
+    def test_validator_accepts_compliant_versions(self) -> None:
+        for version in ("0.1.0", "1.2.3", "10.20.30"):
+            with self.subTest(version=version):
+                result = self._run_validator_with_version(version)
+                self.assertEqual(result.returncode, 0, result.stderr)
+
     @classmethod
     def _path_without_stacktrace(cls) -> str:
-        """The host's own PATH, minus any directory that already has a
-        `stacktrace` binary on it. A test for the CLI-gate needs a PATH the
-        CLI is genuinely absent from, not one that happens to lack it today
-        on this particular machine."""
-        dirs = [d for d in os.environ.get("PATH", "").split(os.pathsep) if d]
-        return os.pathsep.join(d for d in dirs if not (Path(d) / "stacktrace").exists())
+        """A PATH holding only what the hook needs and no `stacktrace`. Built
+        from symlinks into a scratch directory rather than by filtering the
+        host's PATH: filtering removes whole directories, and on a host where
+        `stacktrace` was installed beside `sh` (Debian's `/usr/local/bin`, a
+        container's `/bin`) that took `sh` with it and the test errored for a
+        reason that had nothing to do with the gate."""
+        tools = tempfile.mkdtemp(prefix="stacktrace-plugin-tools-")
+        cls._tooldirs.append(tools)
+        for name in ("sh", "awk", "mkdir", "dirname"):
+            found = shutil.which(name)
+            assert found, f"{name} not on PATH"
+            os.symlink(found, os.path.join(tools, name))
+        return tools
 
     @classmethod
     def _environment(cls, home: str, *, no_stacktrace: bool = False) -> dict[str, str]:
@@ -194,14 +239,26 @@ class PluginContractTests(unittest.TestCase):
         self.assertIn("WHAT WE DETECT", shown)
 
     def test_an_unwritable_marker_costs_the_welcome_and_not_the_session(self) -> None:
-        """The contract is the hook's job; the welcome is a bonus. A read-only
-        home must not take the monitor down with it."""
+        """The contract is the hook's job; the welcome is a bonus. A home the
+        marker cannot be written under must not take the monitor down with it.
+
+        The unwritable place is a path *through a regular file*, so `mkdir -p`
+        fails with ENOTDIR for every user. A read-only directory does not do
+        that: root writes through `chmod 500`, and the suite runs as root in
+        most containers."""
         with tempfile.TemporaryDirectory() as home:
-            os.chmod(home, 0o500)
-            try:
-                result = self._session_start(home)
-            finally:
-                os.chmod(home, 0o700)
+            blocker = Path(home, "not-a-directory")
+            blocker.write_text("")
+            environment = self._environment(home)
+            environment["CLAUDE_CONFIG_DIR"] = str(blocker / "claude")
+            result = subprocess.run(
+                ["sh", str(ROOT / "scripts" / "session_start.sh")],
+                check=True,
+                capture_output=True,
+                text=True,
+                input='{"untrusted":"input"}',
+                env=environment,
+            )
 
         document = json.loads(result.stdout)
         self.assertIn("STACKTRACE_NOTIFY_V1", document["hookSpecificOutput"]["additionalContext"])
