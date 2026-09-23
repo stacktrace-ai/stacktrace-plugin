@@ -12,7 +12,7 @@ per-head Codex review marker.
 | --- | --- |
 | Routine | [trig_01JijKAzDwe3KYKEReBWkdkd](https://claude.ai/code/routines/trig_01JijKAzDwe3KYKEReBWkdkd), Anthropic-hosted Default environment (`env_01F2vbHGYXjLs9PV3hzvbvCX`), claude-sonnet-5, sole source this repository, no connectors |
 | Triggers | GitHub `pull_request.opened` and `pull_request.ready_for_review` (ids `294e66bb-0960-4f7a-9b74-f7b683bbad36` opened (2026-09-18), `11ef5696-f190-45d9-b567-0e7941de2455` ready_for_review (2026-09-23)); a draft PR enrolls when marked ready. Automatic enrollment: verified: PR #17 (opened 2026-09-22) was enrolled and fixed by a cloud session over three Codex rounds under the previous prompt |
-| Prompt source | SHA-256 of the fenced block below: `632a79e1b3b298353c563c2c2c3adc8e4d3338f857552419b24381c91b837106`. **Not yet deployed** — the routine's saved prompt still hashes to `8636560ca4f372bdf43f25b809a1e82a432df1e0a1a285aa0797defb91a8d447` (saved 2026-09-23T06:39:27Z), which lacks this file's `DISMISSED`-exclusion fix. Update the routine, read the prompt back, and confirm byte-identical before relying on the fix |
+| Prompt source | SHA-256 of the fenced block below: `3f48bf87dfd6f40293e491ddece5a81d0d64671f4aaa16daa8ad727278a79226`; saved on the routine 2026-09-23 (adds the DISMISSED exclusion and the neutral review-request marker), read back byte-identical |
 | Codex review | Codex reviews this repository's PRs (observed on #13, #17); confirm all-PRs/every-push in the Codex console |
 | Legacy Actions loop | none; this repository never had review/fix Actions workflows |
 
@@ -61,7 +61,7 @@ At enrollment and after every push, ensure the current head has one Codex
 review queued, running, or completed. Accept an existing request marker only
 when its real author is this session's GitHub identity or a trusted maintainer.
 If neither a review nor a trusted marker exists, post one `@codex review`
-request with <!-- stacktrace-codex-review:FULL_HEAD_SHA -->. Do not duplicate a
+request with <!-- managed-codex-review:FULL_HEAD_SHA -->. Do not duplicate a
 trusted request for the same SHA or use a bot @-mention in other prose.
 
 Use GitHub activity and this session's history to avoid handling the same
