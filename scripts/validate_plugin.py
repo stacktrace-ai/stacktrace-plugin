@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import re
 import stat
 import sys
 from pathlib import Path
@@ -35,8 +36,13 @@ def main() -> int:
 
     if not isinstance(manifest, dict) or manifest.get("name") != "stacktrace":
         fail("plugin manifest must name stacktrace")
-    if "version" in manifest:
-        fail("plugin manifest must omit version so the source commit drives updates")
+    version = manifest.get("version")
+    semver_number = r"(?:0|[1-9][0-9]*)"
+    if not isinstance(version, str) or not re.fullmatch(
+        rf"{semver_number}\.{semver_number}\.{semver_number}", version
+    ):
+        fail("plugin manifest must carry a semver version; bump it on every release "
+             "or installed copies never see the change")
     if manifest.get("experimental") != {"monitors": "./monitors/monitors.json"}:
         fail("plugin manifest must reference only the monitor declaration")
 
@@ -71,7 +77,7 @@ def main() -> int:
     if handler != expected_handler:
         fail("SessionStart must invoke only the notification guidance script")
 
-    expected_skills = {"configure", "findings", "status"}
+    expected_skills = {"findings", "status"}
     skills_root = ROOT / "skills"
     observed_skills = {
         path.name

@@ -76,6 +76,26 @@ the environment's setup mechanism.
    ADR-0039 requires; when they are off, there is nothing to disclose and the
    hook shows nothing. Broken-prerequisite messages still appear there
    regardless.
+5. **Two more startup lines, neither costing a healthy session anything.**
+   When the daemon socket is absent, the hook runs `stacktrace --version`
+   before blaming the daemon: a CLI older than 0.4.0, the first release with
+   the daemon the monitor subscribes to, is the likelier cause, and the line
+   names it and its upgrade command. When
+   `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` or `DISABLE_TELEMETRY` is set,
+   the hook names it, because Claude Code skips plugin monitors under either.
+   Both are shell tests except the version read, which runs only on the
+   broken path.
+
+Until stacktrace ADR-0048 ships `stacktrace daemon start`, no message names
+that command. The startup line says the daemon is not running and points at
+`/stacktrace:status`, which gives today's fix: the session monitor still starts
+the daemon, so `/reload-plugins` or a new session. The daemon-and-CLI version
+check in `/stacktrace:status` reports that it cannot run yet, because the CLI
+does not report the running daemon's version.
+
+When `stacktrace telemetry` prints anything other than `off`, including
+nothing, the welcome shows the `(on)` screen: an unreadable state errs toward
+the fuller disclosure.
 
 ADR-0007's install-scoped welcome marker, screen ownership and disclosure
 decisions otherwise remain in force.
