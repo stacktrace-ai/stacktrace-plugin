@@ -12,7 +12,7 @@ per-head Codex review marker.
 | --- | --- |
 | Routine | [trig_01JijKAzDwe3KYKEReBWkdkd](https://claude.ai/code/routines/trig_01JijKAzDwe3KYKEReBWkdkd), Anthropic-hosted Default environment (`env_01F2vbHGYXjLs9PV3hzvbvCX`), claude-sonnet-5, sole source this repository, no connectors |
 | Triggers | GitHub `pull_request.opened` and `pull_request.ready_for_review` (ids `294e66bb-0960-4f7a-9b74-f7b683bbad36` opened (2026-09-18), `11ef5696-f190-45d9-b567-0e7941de2455` ready_for_review (2026-09-23)); a draft PR enrolls when marked ready. Automatic enrollment: verified: PR #17 (opened 2026-09-22) was enrolled and fixed by a cloud session over three Codex rounds under the previous prompt |
-| Prompt source | SHA-256 of the fenced block below: `3f48bf87dfd6f40293e491ddece5a81d0d64671f4aaa16daa8ad727278a79226`; saved on the routine 2026-09-23 (adds the DISMISSED exclusion and the neutral review-request marker), read back byte-identical |
+| Prompt source | SHA-256 of the fenced block below: `f53b57d53926c66e05d31128881cd0e86f80e78ffe98a377f268286cf105af3a`; saved on the routine 2026-09-23 (neutral review-request marker; matches the shared template), read back byte-identical |
 | Codex review | Codex reviews this repository's PRs (observed on #13, #17); confirm all-PRs/every-push in the Codex console |
 | Legacy Actions loop | none; this repository never had review/fix Actions workflows |
 
@@ -46,8 +46,7 @@ missing capability and stop.
 On enrollment and every wake, read the current head SHA. Edit only when one of
 these authorizes the current head:
 
-- A completed review (state `COMMENTED`, `CHANGES_REQUESTED`, or `APPROVED`,
-  never `DISMISSED`) from chatgpt-codex-connector[bot] or a trusted maintainer.
+- A completed review from chatgpt-codex-connector[bot] or a trusted maintainer.
 - A required CI check failed with an established, code-related cause.
 - A trusted maintainer explicitly approved a reported P3 finding for the
   current head, as CLAUDE.md requires.
