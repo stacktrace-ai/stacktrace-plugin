@@ -1,0 +1,103 @@
+---
+id: 0008
+title: Keep the plugin diagnostic and leave provisioning to the host
+status: proposed
+date: 2026-09-23
+supersedes: null
+superseded-by: null
+amends: 0007
+amended-by: null
+---
+
+Subsystem: the agent plugin. Amends ADR-0007 by removing the configure skill,
+closing its missing-CLI issue with startup diagnostics and making the welcome
+screen report telemetry state instead of assuming it.
+
+## Context
+
+Stacktrace ADR-0048 moves daemon lifecycle out of agent adapters. The host or a
+person starts the daemon; a monitor only subscribes. The plugin still crosses
+the same ownership boundary through `/stacktrace:configure`, which installs the
+CLI with `uv tool install`. Sandbox setup already owns that installation, and a
+laptop user can install the CLI directly.
+
+Once installation is removed, configure has no distinct job. Its remaining
+checks duplicate `/stacktrace:status`. Keeping both commands would make two
+places explain the same broken states while neither should repair them.
+
+Removing provisioning must not make failure silent. ADR-0007 already records
+that a missing CLI prevents the startup hook from showing anything. The fixed
+`USAGE METRICS  (on)` welcome label has a related problem: telemetry is CLI
+configuration, so the plugin can display the wrong state even when everything
+else works.
+
+## Decision
+
+The plugin reads and explains machine state; it does not install software,
+start services or change configuration. Provisioning belongs to a person or to
+the environment's setup mechanism.
+
+1. **Remove `skills/configure/`.** `/stacktrace:status` becomes the single
+   diagnostic skill. It checks, in order: `stacktrace` is on `PATH`, the daemon
+   is reachable, daemon and CLI versions agree, and the current session's
+   monitor is connected. It stops at the first failure. Missing prerequisites
+   name the next command: `uv tool install stacktrace-cli`,
+   `stacktrace daemon start`, or `/reload-plugins`. A version mismatch says the
+   automatic restart has not completed and asks the user to check again. The
+   skill does not offer to run a mutating command.
+2. **Report a broken prerequisite at every affected session start.** The hook
+   emits one short `systemMessage` when the CLI is absent or the daemon socket
+   is absent, including the relevant command. The socket test stays in shell so
+   a healthy session does not start Python merely to prove health. These
+   messages diagnose; they do not fix.
+3. **Render the telemetry state that the CLI owns.** Only when the one-time
+   welcome is going to be shown, the hook asks `stacktrace telemetry` for the
+   current setting and prints `USAGE METRICS  (on)` or `(off)`. The enabled
+   screen keeps `Turn it off: stacktrace telemetry off`, preserving ADR-0039's
+   requirement that normal use begins with the off switch visible. No telemetry
+   command runs on later healthy starts.
+4. **Do not show the welcome in remote Claude sessions.** When
+   `CLAUDE_CODE_REMOTE=true`, the environment recreates plugin data often enough
+   that an install-scoped marker would turn the welcome into a recurring
+   banner. Broken-prerequisite messages still appear there.
+
+ADR-0007's install-scoped welcome marker, screen ownership and disclosure
+decisions otherwise remain in force.
+
+## Alternatives considered
+
+- **Keep configure as a check-only skill.** Rejected because it would be
+  `/stacktrace:status` under another name.
+- **Let status offer to install the CLI or start the daemon.** Rejected because
+  confirmation does not change ownership: the plugin would still be proposing
+  a machine mutation that setup or the user owns.
+- **Run `stacktrace daemon status` from SessionStart.** Rejected because the
+  common healthy path needs only a socket-existence test and should not pay for
+  a Python process on every session.
+- **Parse telemetry configuration in shell.** Rejected because it would copy
+  the CLI's rules for missing, unreadable and malformed settings into another
+  language. The CLI answers once when the welcome actually needs the value.
+- **Show the welcome in cloud sessions.** Rejected for ADR-0006's reason: a
+  screen shown every session becomes noise people learn to ignore.
+
+## Consequences
+
+Every plugin path becomes read-only with respect to the machine. Installation,
+daemon startup and telemetry changes have one owner each, outside the plugin.
+
+A user who installs only the plugin no longer gets silence: the first startup
+line explains which prerequisite is missing and names the command that resolves
+it. `/stacktrace:status` provides the deeper ordered diagnosis.
+
+Remote users do not see the welcome. Its disclosure remains available from
+`stacktrace telemetry show`, and the owner of the environment setup chooses the
+telemetry setting before the session begins.
+
+## Open issues
+
+The shell socket test can mistake a stale socket for a running daemon.
+`/stacktrace:status` remains the authoritative check.
+
+Whether plugin monitors run in Claude Code cloud sessions is unverified.
+Organization-required plugins currently do not sync there, which is a separate
+host limitation.

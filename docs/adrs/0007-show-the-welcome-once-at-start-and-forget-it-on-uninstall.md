@@ -6,7 +6,7 @@ date: 2026-09-22
 supersedes: null
 superseded-by: null
 amends: 0006
-amended-by: null
+amended-by: 0008
 ---
 
 Subsystem: the agent plugin. Amends ADR-0006: removes the welcome skill, moves
