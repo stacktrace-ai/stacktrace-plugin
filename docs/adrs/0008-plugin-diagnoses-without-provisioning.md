@@ -56,10 +56,15 @@ the environment's setup mechanism.
    screen keeps `Turn it off: stacktrace telemetry off`, preserving ADR-0039's
    requirement that normal use begins with the off switch visible. No telemetry
    command runs on later healthy starts.
-4. **Do not show the welcome in remote Claude sessions.** When
+4. **Gate the remote welcome on live telemetry state, not the marker.** When
    `CLAUDE_CODE_REMOTE=true`, the environment recreates plugin data often enough
-   that an install-scoped marker would turn the welcome into a recurring
-   banner. Broken-prerequisite messages still appear there.
+   that the install-scoped marker cannot be trusted, so the hook does not rely
+   on it there. It still asks `stacktrace telemetry` for the current setting on
+   every remote session start: when usage metrics are on, it shows the same
+   welcome screen so the off switch stays visible before normal use, as
+   ADR-0039 requires; when they are off, there is nothing to disclose and the
+   hook shows nothing. Broken-prerequisite messages still appear there
+   regardless.
 
 ADR-0007's install-scoped welcome marker, screen ownership and disclosure
 decisions otherwise remain in force.
@@ -77,8 +82,11 @@ decisions otherwise remain in force.
 - **Parse telemetry configuration in shell.** Rejected because it would copy
   the CLI's rules for missing, unreadable and malformed settings into another
   language. The CLI answers once when the welcome actually needs the value.
-- **Show the welcome in cloud sessions.** Rejected for ADR-0006's reason: a
-  screen shown every session becomes noise people learn to ignore.
+- **Show the welcome unconditionally in cloud sessions.** Rejected for
+  ADR-0006's reason: a screen shown every session regardless of state becomes
+  noise people learn to ignore. Gating it on telemetry state instead means a
+  correctly provisioned environment, one where telemetry is off before the
+  session begins, shows nothing.
 
 ## Consequences
 
@@ -89,9 +97,10 @@ A user who installs only the plugin no longer gets silence: the first startup
 line explains which prerequisite is missing and names the command that resolves
 it. `/stacktrace:status` provides the deeper ordered diagnosis.
 
-Remote users do not see the welcome. Its disclosure remains available from
-`stacktrace telemetry show`, and the owner of the environment setup chooses the
-telemetry setting before the session begins.
+Remote users see the welcome exactly when usage metrics are on, since no
+marker survives environment recreation there; an environment that turns
+telemetry off before the session begins shows nothing. `stacktrace telemetry
+show` remains available either way.
 
 ## Open issues
 
