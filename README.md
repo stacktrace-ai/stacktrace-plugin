@@ -65,4 +65,4 @@ The manifest intentionally omits an explicit version while the plugin is under
 active development, so Claude derives updates from the source commit. Current
 Claude releases report that choice as a non-fatal validation warning.
 
-Review automation: [managed PR review and fixes](docs/managed-autofix.md).
+Review automation: [managed PR review and fixes](.github/managed-autofix.md).
