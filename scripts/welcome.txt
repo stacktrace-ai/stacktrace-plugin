@@ -1,0 +1,25 @@
+  ┌─┐┌┬┐┌─┐┌─┐┬┌─┌┬┐┬─┐┌─┐┌─┐┌─┐
+  └─┐ │ ├─┤│  ├┴┐ │ ├┬┘├─┤│  ├┤ 
+  └─┘ ┴ ┴ ┴└─┘┴ ┴ ┴ ┴└─┴ ┴└─┘└─┘
+
+  we watch your agents, so you don't have to
+
+
+  WHAT WE DETECT
+
+  credential-egress   A credential reached an outbound call.
+  agent-blocked       Why the agent stopped, and what to do next.
+                      quota · policy · throttled · refused
+
+
+  USAGE METRICS  (on)
+
+  Sent as it happens: install, session start, each finding
+  delivered (rule and severity only), errors (type only).
+  Each carries a random install id, session id, agent, CLI
+  version, OS, and whether it ran in the cloud.
+
+  Never sent: the finding, prompts, files, paths, repo names.
+
+  What is sent:   stacktrace telemetry show
+  Turn it off:    stacktrace telemetry off
