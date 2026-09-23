@@ -119,9 +119,11 @@ The intended command surface is deliberately small:
 stacktrace daemon subscribe --agent-kind claude-code
 ```
 
-The command reads the session ID from the host environment, ensures the
-per-user daemon is running, connects, subscribes, and relays eligible events.
-It emits operational logs to stderr. Its stdout is reserved exclusively for
+The command reads the session ID from the host environment, connects to the
+already-running per-user daemon, subscribes, and relays eligible events. It
+does not start the daemon: `stacktrace-plugin` ADR-0008 assigns daemon
+startup to the host or the user, never to the plugin or its monitor. It
+emits operational logs to stderr. Its stdout is reserved exclusively for
 events Claude should process.
 
 A single host commonly has many concurrent `session_id`s: one per active
@@ -309,7 +311,9 @@ The MVP does not require Slack or Fleet configuration.
 1. Claude runs the `SessionStart` instruction hook.
 2. Claude starts the plugin monitor.
 3. The monitor reads `CLAUDE_CODE_SESSION_ID`.
-4. `stacktrace daemon subscribe` starts the daemon idempotently if necessary.
+4. `stacktrace daemon subscribe` connects to the daemon, which the host or
+   user already started (ADR-0008); the `SessionStart` hook separately
+   reports when the daemon socket is absent.
 5. The monitor opens the Unix socket and subscribes for that exact session.
 6. The daemon delivers any eligible, previously unacknowledged event for that
    session and then streams new events.

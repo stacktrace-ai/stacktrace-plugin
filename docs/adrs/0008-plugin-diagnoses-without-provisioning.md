@@ -53,9 +53,13 @@ the environment's setup mechanism.
 3. **Render the telemetry state that the CLI owns.** Only when the one-time
    welcome is going to be shown, the hook asks `stacktrace telemetry` for the
    current setting and prints `USAGE METRICS  (on)` or `(off)`. The enabled
-   screen keeps `Turn it off: stacktrace telemetry off`, preserving ADR-0039's
-   requirement that normal use begins with the off switch visible. No telemetry
-   command runs on later healthy starts.
+   screen is ADR-0007's text unchanged, keeping `Turn it off: stacktrace
+   telemetry off` so normal use begins with the off switch visible, as
+   ADR-0039 requires. The disabled screen drops the `Sent as it happens...`
+   paragraph and the `Turn it off` line, since nothing is being sent to
+   disclose or turn off; `What is sent: stacktrace telemetry show` stays,
+   since that command still answers truthfully when metrics are off. No
+   telemetry command runs on later healthy starts.
 4. **Gate the remote welcome on live telemetry state, not the marker.** When
    `CLAUDE_CODE_REMOTE=true`, the environment recreates plugin data often enough
    that the install-scoped marker cannot be trusted, so the hook does not rely
