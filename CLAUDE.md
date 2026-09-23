@@ -141,10 +141,6 @@ silently editing an accepted ADR breaks that contract.
 - Push to remote at logical points; don't hoard local commits.
 - Only create commits when the user requests one. If unclear, ask.
 - Only push to a remote when the user requests it.
-- **Finishing a feature branch: default to push + open a PR.** PR
-  review is the merge path even on solo repos. Exceptions only when
-  the user explicitly says "merge locally," "keep as branch," or
-  "discard."
 
 ## TDD for business logic
 
