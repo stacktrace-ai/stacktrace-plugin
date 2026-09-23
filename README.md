@@ -35,8 +35,9 @@ For each interactive Claude session, the plugin runs:
 stacktrace daemon subscribe --agent-kind claude-code
 ```
 
-The command subscribes with Claude's native session ID and starts the per-user
-daemon if needed. The daemon reads Claude's native session log, runs detection,
+The command subscribes with Claude's native session ID to the already-running
+per-user daemon; the host or user starts the daemon, never the plugin (ADR-0008
+in `docs/adrs/`). The daemon reads Claude's native session log, runs detection,
 and sends only notification-worthy events back to that exact session. Raw
 transcript content is not copied into notification events.
 
