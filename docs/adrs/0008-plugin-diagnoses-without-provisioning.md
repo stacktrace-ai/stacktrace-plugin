@@ -114,3 +114,14 @@ The shell socket test can mistake a stale socket for a running daemon.
 Whether plugin monitors run in Claude Code cloud sessions is unverified.
 Organization-required plugins currently do not sync there, which is a separate
 host limitation.
+
+Whether the daemon is still there for the *next* session is unresolved.
+`spec.md`'s session-end design drains, persists, and exits the daemon once no
+session or pending work remains, and explicitly needs no supervisor. Once
+`subscribe` no longer starts the daemon, an idle-exited daemon leaves the next
+session's monitor unable to connect until someone runs `stacktrace daemon
+start` again, degrading "automatic" monitoring into a per-session manual step.
+Keeping the daemon resident, adding a host-level supervisor that starts it per
+session, or retaining some idempotent-start allowance are the candidate
+resolutions; picking one is host/CLI lifecycle work for `stacktrace-ai/stacktrace`
+ADR-0048 (stacktrace-ai/stacktrace#66), not a decision this ADR can make alone.
