@@ -4,6 +4,7 @@ import json
 import os
 import re
 import shutil
+import socket
 import subprocess
 import tempfile
 import sys
@@ -14,26 +15,112 @@ ROOT = Path(__file__).resolve().parents[1]
 WELCOME = ROOT / "scripts" / "welcome.txt"
 
 
+#: A current release, with usage metrics on, unless the STUB_* variables say
+#: otherwise. Records every call in STUB_LOG, so a test can prove a healthy
+#: session never started it.
+STACKTRACE_STUB = """#!/bin/sh
+[ -n "${STUB_LOG:-}" ] && echo "$*" >>"$STUB_LOG"
+case "$1" in
+  --version) echo "${STUB_VERSION:-stacktrace 0.4.0 (openaca 0.7.0)}" ;;
+  telemetry) echo "${STUB_TELEMETRY:-on}" ;;
+  daemon) exit "${STUB_DAEMON_EXIT:-0}" ;;
+esac
+exit 0
+"""
+
+#: Every external command the hook runs.
+TOOLS = ("sh", "awk", "mkdir", "dirname", "sed", "tr", "id")
+
+
+class Stubs:
+    """A `stacktrace` stub on a PATH that holds nothing else but symlinks to
+    `TOOLS`, and a real Unix socket standing in for a running daemon's.
+
+    Never the host's PATH, filtered or not: filtering removes whole
+    directories, and where `stacktrace` sits beside `sh` (Debian's
+    `/usr/local/bin`, a container's `/bin`) it took `sh` with it."""
+
+    def __init__(self) -> None:
+        self._dir = tempfile.TemporaryDirectory()
+        base = Path(self._dir.name)
+        self.cli = base / "cli"
+        self.tools = base / "tools"
+        self.cli.mkdir()
+        stub = self.cli / "stacktrace"
+        stub.write_text(STACKTRACE_STUB)
+        stub.chmod(0o755)
+        self.tools.mkdir()
+        for name in TOOLS:
+            found = shutil.which(name)
+            assert found, f"{name} not on PATH"
+            (self.tools / name).symlink_to(found)
+        # Bound and closed: the file stays a socket, which is all `[ -S ]` asks.
+        self.socket = base / "d.sock"
+        listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        listener.bind(str(self.socket))
+        listener.close()
+        self.no_socket = base / "absent.sock"
+
+    def path(self, *, cli: bool = True) -> str:
+        return os.pathsep.join([str(self.cli)] * cli + [str(self.tools)])
+
+    def cleanup(self) -> None:
+        self._dir.cleanup()
+
+
+def isolated(home: str, stubs: Stubs, *, cli: bool = True, daemon: bool = True, **extra: str) -> dict[str, str]:
+    """HOME is always the scratch directory, and nothing that changes what the
+    hook does is inherited from whatever shell is running the suite."""
+    environment = dict(
+        os.environ,
+        HOME=home,
+        PATH=stubs.path(cli=cli),
+        STACKTRACE_DAEMON_SOCKET=str(stubs.socket if daemon else stubs.no_socket),
+    )
+    for name in (
+        "CLAUDE_CONFIG_DIR",
+        "CLAUDE_PLUGIN_DATA",
+        "CLAUDE_CODE_REMOTE",
+        "NO_COLOR",
+        "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC",
+        "DISABLE_TELEMETRY",
+        "STUB_LOG",
+        "STUB_VERSION",
+        "STUB_TELEMETRY",
+    ):
+        environment.pop(name, None)
+    environment.update(extra)
+    return environment
+
+
+def session_start(environment: dict[str, str]) -> dict[str, object]:
+    result = subprocess.run(
+        ["sh", str(ROOT / "scripts" / "session_start.sh")],
+        check=True,
+        capture_output=True,
+        text=True,
+        input='{"untrusted":"input"}',
+        env=environment,
+    )
+    assert result.stderr == "", result.stderr
+    return json.loads(result.stdout)
+
+
 class PluginContractTests(unittest.TestCase):
     """Everything here except the CLI-gate test itself runs with a stub
-    `stacktrace` on PATH: the hook now refuses to show the welcome without
-    one, and these tests are about the marker and screen, not that gate."""
+    `stacktrace` on PATH and a daemon socket present: the hook refuses to show
+    the welcome without the CLI, and these tests are about the marker and
+    screen, not the diagnosis."""
 
-    _bindir: tempfile.TemporaryDirectory[str]
-    _tooldirs: list[str] = []
+    _stubs: Stubs
 
     @classmethod
     def setUpClass(cls) -> None:
-        cls._bindir = tempfile.TemporaryDirectory()
-        stub = Path(cls._bindir.name, "stacktrace")
-        stub.write_text("#!/bin/sh\nexit 0\n")
-        stub.chmod(0o755)
+        cls._stubs = Stubs()
 
     @classmethod
     def tearDownClass(cls) -> None:
-        cls._bindir.cleanup()
-        for tools in cls._tooldirs:
-            shutil.rmtree(tools, ignore_errors=True)
+        cls._stubs.cleanup()
 
     def test_validator_accepts_the_repository(self) -> None:
         result = subprocess.run(
@@ -80,33 +167,8 @@ class PluginContractTests(unittest.TestCase):
                 self.assertEqual(result.returncode, 0, result.stderr)
 
     @classmethod
-    def _path_without_stacktrace(cls) -> str:
-        """A PATH holding only what the hook needs and no `stacktrace`. Built
-        from symlinks into a scratch directory rather than by filtering the
-        host's PATH: filtering removes whole directories, and on a host where
-        `stacktrace` was installed beside `sh` (Debian's `/usr/local/bin`, a
-        container's `/bin`) that took `sh` with it and the test errored for a
-        reason that had nothing to do with the gate."""
-        tools = tempfile.mkdtemp(prefix="stacktrace-plugin-tools-")
-        cls._tooldirs.append(tools)
-        for name in ("sh", "awk", "mkdir", "dirname"):
-            found = shutil.which(name)
-            assert found, f"{name} not on PATH"
-            os.symlink(found, os.path.join(tools, name))
-        return tools
-
-    @classmethod
     def _environment(cls, home: str, *, no_stacktrace: bool = False) -> dict[str, str]:
-        """HOME is always the scratch directory, and NO_COLOR is never
-        inherited from whatever shell is running the suite: a developer or
-        CI image with it set would otherwise silently change what these
-        tests see."""
-        path = cls._path_without_stacktrace() if no_stacktrace else f"{cls._bindir.name}:{os.environ['PATH']}"
-        environment = dict(os.environ, HOME=home, PATH=path)
-        environment.pop("CLAUDE_CONFIG_DIR", None)
-        environment.pop("CLAUDE_PLUGIN_DATA", None)
-        environment.pop("NO_COLOR", None)
-        return environment
+        return isolated(home, cls._stubs, cli=not no_stacktrace)
 
     @classmethod
     def _session_start(cls, home: str) -> subprocess.CompletedProcess[str]:
@@ -211,7 +273,7 @@ class PluginContractTests(unittest.TestCase):
                     env=self._environment(home, no_stacktrace=True),
                 ).stdout
             )
-            self.assertNotIn("systemMessage", before)
+            self.assertNotIn("WHAT WE DETECT", before.get("systemMessage", ""))
             self.assertFalse(Path(home, ".claude", "stacktrace-welcomed").exists())
 
             after = json.loads(self._session_start(home).stdout)
@@ -276,6 +338,134 @@ class PluginContractTests(unittest.TestCase):
         self.assertEqual(
             monitors[0]["command"], "stacktrace daemon subscribe --agent-kind claude-code"
         )
+
+
+class DiagnosisTests(unittest.TestCase):
+    """What session start says is wrong (ADR-0008). One line per problem,
+    nothing on a healthy machine, and never a fix applied."""
+
+    def setUp(self) -> None:
+        self.stubs = Stubs()
+        self.home = tempfile.TemporaryDirectory()
+        self.log = Path(self.home.name, "calls.log")
+        marker = Path(self.home.name, ".claude", "stacktrace-welcomed")
+        marker.parent.mkdir()
+        marker.write_text("")  # already welcomed: these tests are about diagnosis
+
+    def tearDown(self) -> None:
+        self.stubs.cleanup()
+        self.home.cleanup()
+
+    def shown(self, **options: object) -> list[str]:
+        document = session_start(isolated(self.home.name, self.stubs, STUB_LOG=str(self.log), **options))
+        return str(document.get("systemMessage", "")).splitlines()
+
+    def calls(self) -> list[str]:
+        return self.log.read_text().splitlines() if self.log.exists() else []
+
+    def test_a_healthy_session_says_nothing_and_starts_no_python(self) -> None:
+        """The CLI check is `command -v` and the daemon check a socket test,
+        so a working machine never pays for a Python start."""
+        self.assertEqual(self.shown(), [])
+        self.assertEqual(self.calls(), [])
+
+    def test_a_missing_cli_is_named_with_its_install_command(self) -> None:
+        self.assertEqual(
+            self.shown(cli=False),
+            [
+                "The Stacktrace CLI is not installed. Install it with "
+                "`uv tool install stacktrace-cli`, then run /reload-plugins."
+            ],
+        )
+
+    def test_a_missing_daemon_socket_is_reported(self) -> None:
+        self.assertEqual(
+            self.shown(daemon=False), ["The Stacktrace daemon is not running. /stacktrace:status explains why."]
+        )
+        self.assertEqual(self.calls(), ["--version"])
+
+    def test_a_cli_below_the_floor_is_the_likelier_cause_of_no_daemon(self) -> None:
+        """0.4.0 is the first release with the daemon the monitor subscribes
+        to. A build from source is held to the same floor."""
+        for version in ("stacktrace 0.3.1 (openaca 0.6.0)", "stacktrace 0.3.1+abc1234 (openaca 0.6.0)"):
+            with self.subTest(version=version):
+                lines = self.shown(daemon=False, STUB_VERSION=version)
+
+                self.assertEqual(len(lines), 1)
+                self.assertIn("needs stacktrace 0.4.0 or newer", lines[0])
+                self.assertIn(version, lines[0])
+
+    def test_newer_versions_pass_the_floor(self) -> None:
+        for version in ("stacktrace 0.4.0+0d20658 (openaca 0.7.0)", "stacktrace 0.10.0 (openaca 0.7.0)"):
+            with self.subTest(version=version):
+                self.assertEqual(
+                    self.shown(daemon=False, STUB_VERSION=version),
+                    ["The Stacktrace daemon is not running. /stacktrace:status explains why."],
+                )
+
+    def test_the_variables_that_stop_plugin_monitors_are_named(self) -> None:
+        for variable in ("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "DISABLE_TELEMETRY"):
+            with self.subTest(variable=variable):
+                lines = self.shown(**{variable: "1"})
+
+                self.assertEqual(len(lines), 1)
+                self.assertTrue(lines[0].startswith(f"{variable} is set"))
+
+    def test_diagnosis_changes_nothing(self) -> None:
+        """Stateless: whatever it finds, HOME holds only what the test put
+        there."""
+        before = sorted(str(q) for q in Path(self.home.name).rglob("*"))
+        for options in ({"cli": False}, {"daemon": False}, {"STUB_VERSION": "stacktrace 0.3.1 (x)"}):
+            with self.subTest(options=options):
+                self.shown(**options)
+        after = sorted(str(q) for q in Path(self.home.name).rglob("*") if q != self.log)
+        self.assertEqual(after, before)
+
+
+class WelcomeStateTests(unittest.TestCase):
+    """The welcome shows the telemetry state the CLI owns (ADR-0008)."""
+
+    def setUp(self) -> None:
+        self.stubs = Stubs()
+        self.home = tempfile.TemporaryDirectory()
+
+    def tearDown(self) -> None:
+        self.stubs.cleanup()
+        self.home.cleanup()
+
+    def welcome(self, **options: str) -> str:
+        return str(session_start(isolated(self.home.name, self.stubs, **options)).get("systemMessage", ""))
+
+    def test_metrics_on_shows_the_screen_as_written(self) -> None:
+        self.assertEqual(self.welcome(), WELCOME.read_text(encoding="utf-8"))
+
+    def test_metrics_off_drops_what_is_sent_and_the_off_switch(self) -> None:
+        shown = self.welcome(STUB_TELEMETRY="off")
+
+        self.assertIn("USAGE METRICS  (off)", shown)
+        self.assertNotIn("Sent as it happens", shown)
+        self.assertNotIn("stacktrace telemetry off", shown)
+        self.assertIn("stacktrace telemetry show", shown)
+        self.assertIn("Never sent", shown)
+        self.assertNotIn("\n\n\n\n", shown)
+
+    def test_an_unreadable_state_shows_the_fuller_disclosure(self) -> None:
+        self.assertIn("USAGE METRICS  (on)", self.welcome(STUB_TELEMETRY="garbled"))
+
+    def test_a_remote_session_ignores_the_marker(self) -> None:
+        """Cloud sessions recreate plugin data, so the marker cannot be
+        trusted there: the welcome shows whenever metrics are on, and the
+        marker is neither read nor written."""
+        remote = {"CLAUDE_CODE_REMOTE": "true"}
+        first = self.welcome(**remote)
+        second = self.welcome(**remote)
+
+        self.assertIn("WHAT WE DETECT", first)
+        self.assertIn("WHAT WE DETECT", second)
+        self.assertFalse(Path(self.home.name, ".claude", "stacktrace-welcomed").exists())
+
+    def test_a_remote_session_with_metrics_off_shows_nothing(self) -> None:
+        self.assertEqual(self.welcome(CLAUDE_CODE_REMOTE="true", STUB_TELEMETRY="off"), "")
 
 
 class WelcomeScreenTests(unittest.TestCase):

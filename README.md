@@ -6,7 +6,7 @@ the first supported host.
 
 Each host integration is a thin adapter over the Stacktrace CLI and daemon. The
 Claude adapter declares one session-lifetime monitor, adds notification guidance
-at session start, and provides configure, status, and findings workflows.
+at session start, and provides status and findings workflows.
 Parsing, detection, policy, persistence, and routing remain in Stacktrace.
 
 Future Codex and Cursor adapters belong in this repository. Host-specific
@@ -22,12 +22,18 @@ credentials and you need read access to it:
 ```text
 /plugin marketplace add stacktrace-ai/stacktrace-plugin
 /plugin install stacktrace@stacktrace
-/stacktrace:configure
 ```
 
-`/stacktrace:configure` verifies or installs the `stacktrace` CLI, which must be
-0.4.0 or newer; it upgrades an older install. After a new installation, run
-`/reload-plugins` once so Claude starts the monitor with the CLI available.
+The plugin needs the `stacktrace` CLI, 0.4.0 or newer, which it does not
+install (ADR-0008):
+
+```text
+uv tool install stacktrace-cli
+```
+
+Then run `/reload-plugins` once so Claude starts the monitor with the CLI
+available. Each session start says when the CLI or the daemon is missing, and
+`/stacktrace:status` gives the full diagnosis.
 
 ## Automatic flow
 
@@ -46,7 +52,6 @@ transcript content is not copied into notification events.
 The available workflows are:
 
 ```text
-/stacktrace:configure
 /stacktrace:status
 /stacktrace:findings
 ```
