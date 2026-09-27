@@ -46,18 +46,18 @@ the environment's setup mechanism.
    disconnected monitor is diagnosed against the host Claude Code version,
    reporting whether it supports the monitor declaration and
    `CLAUDE_CODE_SESSION_ID`, instead of being read as a silent failure.
-   Missing prerequisites name the next command: `uv tool install
-   stacktrace-cli`, `stacktrace daemon start`, or `/reload-plugins`; an
-   unsupported host or missing `PushNotification` names the Claude Code
-   upgrade instead. A version mismatch names the explicit restart: `daemon
-   stop` followed by `daemon start` for a detached installation, or a service
-   restart for a host-managed installation. The skill does not offer to run a
-   mutating command.
+   Remediation lives in one named rule per condition: install or find the CLI,
+   upgrade the CLI resolved by `PATH`, start or recover the daemon, and restart
+   onto the installed version. Diagnostic branches refer to those rules rather
+   than restating their commands. A CLI failure stops before prescribing a
+   daemon action; the user repairs the CLI and reruns status so the next check
+   can observe daemon state. The skill does not offer to run a mutating command.
 2. **Report a broken prerequisite at every affected session start.** The hook
    emits one short `systemMessage` when the CLI is absent or the daemon socket
-   is absent, including the relevant command. The socket test stays in shell so
-   a healthy session does not start Python merely to prove health. These
-   messages diagnose; they do not fix.
+   is absent. It states the observed failure and routes to `/stacktrace:status`;
+   it contains no installation, upgrade or daemon-lifecycle prescription. The
+   socket test stays in shell so a healthy session does not start Python merely
+   to prove health. These messages diagnose; they do not fix.
 3. **Render the telemetry state that the CLI owns.** Only when the one-time
    welcome is going to be shown, the hook asks `stacktrace telemetry` for the
    current setting and prints `USAGE METRICS  (on)` or `(off)`. The enabled
@@ -80,18 +80,18 @@ the environment's setup mechanism.
 5. **Two more startup lines, neither costing a healthy session anything.**
    When the daemon socket is absent, the hook runs `stacktrace --version`
    before blaming the daemon: a CLI older than 0.5.2 does not implement the
-   host-owned lifecycle contract, and the line names it, its upgrade command
-   and `stacktrace daemon start`. When
+   host-owned lifecycle contract, and the line names the resolved version and
+   routes to `/stacktrace:status`. When
    `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` or `DISABLE_TELEMETRY` is set,
    the hook names it, because Claude Code skips plugin monitors under either.
    Both are shell tests except the version read, which runs only on the
    broken path.
 
-Stacktrace 0.5.2 implements ADR-0072. The startup line names `stacktrace daemon
-start` directly. `daemon status` reports `running: yes`, `running: no` or
-`running: unresponsive`; for a running daemon it also reports both the daemon's
-`version:` and the CLI's `installed:` build. `/stacktrace:status` reads those
-rows rather than treating the command's exit status as daemon availability.
+Stacktrace 0.5.2 implements ADR-0072. `daemon status` reports `running: yes`,
+`running: no` or `running: unresponsive`; for a running daemon it also reports
+both the daemon's `version:` and the CLI's `installed:` build.
+`/stacktrace:status` reads those rows rather than treating the command's exit
+status as daemon availability, and owns the install-mode-specific remediation.
 
 When `stacktrace telemetry` prints anything other than `off`, including
 nothing, the welcome shows the `(on)` screen: an unreadable state errs toward
@@ -110,6 +110,11 @@ decisions otherwise remain in force.
 - **Run `stacktrace daemon status` from SessionStart.** Rejected because the
   common healthy path needs only a socket-existence test and should not pay for
   a Python process on every session.
+- **Share lifecycle prose between the shell hook and the Markdown skill.**
+  Rejected because the skill has no include mechanism; generation would add a
+  build-time dependency while leaving two runtime surfaces responsible for the
+  same decision. The hook reports facts and routes to the one remediation
+  owner instead.
 - **Parse telemetry configuration in shell.** Rejected because it would copy
   the CLI's rules for missing, unreadable and malformed settings into another
   language. The CLI answers once when the welcome actually needs the value.
@@ -127,8 +132,9 @@ outside the plugin. A detached daemon remains resident after the agent session
 ends; continuous crash recovery belongs to the host's service manager.
 
 A user who installs only the plugin no longer gets silence: the first startup
-line explains which prerequisite is missing and names the command that resolves
-it. `/stacktrace:status` provides the deeper ordered diagnosis.
+line explains which prerequisite is missing and routes to
+`/stacktrace:status`, which provides the ordered diagnosis and the one
+install-mode-aware remediation.
 
 Remote users see the welcome exactly when usage metrics are on, since no
 marker survives environment recreation there; an environment that turns

@@ -301,11 +301,11 @@ supervision logic.
    (ADR-0008). A host-managed installation runs `stacktrace daemon run` under
    its native service manager instead.
 2. The next Claude session automatically starts the plugin monitor. If a
-   prerequisite is missing, the `SessionStart` hook reports it and names the
-   command that resolves it; `/stacktrace:status` gives the deeper ordered
-   diagnosis, including whether the host Claude Code version supports the
-   monitor declaration, `CLAUDE_CODE_SESSION_ID`, and `PushNotification`.
-   Neither runs a mutating command.
+   prerequisite is missing, the `SessionStart` hook reports the observed fact
+   and routes to `/stacktrace:status`. That skill owns the remediation and the
+   deeper ordered diagnosis, including whether the host Claude Code version
+   supports the monitor declaration, `CLAUDE_CODE_SESSION_ID`, and
+   `PushNotification`. Neither runs a mutating command.
 
 The MVP does not require Slack or Fleet configuration.
 
@@ -353,7 +353,7 @@ manager.
 
 | Failure | Required behavior |
 | --- | --- |
-| Daemon is not running | `subscribe` does not start it (ADR-0008); the monitor fails to connect and the `SessionStart` hook reports the daemon socket is absent, naming `stacktrace daemon start`. |
+| Daemon is not running | `subscribe` does not start it (ADR-0008); the monitor fails to connect and the `SessionStart` hook reports the daemon socket is absent, routing to `/stacktrace:status` for detached-versus-host-managed remediation. |
 | Monitor cannot connect | Retry with backoff; put diagnostics on stderr, never stdout. |
 | Monitor disconnects | Retain unacknowledged events for that session. |
 | Daemon restarts | Reload durable cursors and delivery state; subscribers reconnect. |
