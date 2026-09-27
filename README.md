@@ -74,7 +74,7 @@ python3 -m unittest discover -s tests -v
 claude plugin validate --strict .
 ```
 
-The manifest carries a semver `version`, currently `0.1.1`, and `claude plugin
+The manifest carries a semver `version`, currently `0.2.0`, and `claude plugin
 validate --strict .` passes. Claude Code treats that string as the plugin's
 identity: an installed copy updates only when the version changes, so **every
 release bumps it**. `scripts/validate_plugin.py` fails a manifest without one.
