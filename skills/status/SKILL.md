@@ -27,7 +27,9 @@ say which checks did not run.
      running.
    - If the command produces no readable `running:` row, report its output and
      stop.
-   - `running: no`: the fix is `stacktrace daemon start`.
+   - `running: no`: a detached installation runs `stacktrace daemon start`; a
+     host-managed installation must recover its service running `stacktrace
+     daemon run`. Name both paths without running either.
    - `running: unresponsive`: report it for the host supervisor or operator to
      handle. Do not remove the socket, discover a PID or suggest a force-stop.
 3. **Daemon and CLI versions agree.** When `running: yes`, compare the
