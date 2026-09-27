@@ -390,10 +390,13 @@ class DiagnosisTests(unittest.TestCase):
 
     def test_a_cli_below_the_floor_is_the_likelier_cause_of_no_daemon(self) -> None:
         """0.5.2 is the first release with the host-owned lifecycle contract.
-        A build from source is held to the same floor."""
+        A build from source is held to the same floor. A prerelease of the
+        floor version is not a released build of it, so it is held to the
+        floor too rather than parsed as an exact match."""
         for version in (
             "stacktrace 0.5.1 (openaca 0.7.0)",
             "stacktrace 0.5.1+abc1234 (openaca 0.7.0)",
+            "stacktrace 0.5.2rc1 (openaca 0.7.0)",
         ):
             with self.subTest(version=version):
                 lines = self.shown(daemon=False, STUB_VERSION=version)

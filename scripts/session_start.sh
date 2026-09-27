@@ -69,8 +69,10 @@ screen() {
   ' "$welcome" | escape
 }
 
-# `stacktrace 0.5.2+0f61ea1 (openaca 0.7.0)` -> `0 5 2`
-numbers() { printf '%s\n' "$1" | sed -n 's/^stacktrace \([0-9]*\)\.\([0-9]*\)\.\([0-9]*\).*/\1 \2 \3/p'; }
+# `stacktrace 0.5.2+0f61ea1 (openaca 0.7.0)` -> `0 5 2`. A suffix that is not
+# a space or `+` (a prerelease like `0.5.2rc1`) fails to match, so
+# below_floor's unreadable-version fallback treats it as below the floor.
+numbers() { printf '%s\n' "$1" | sed -n 's/^stacktrace \([0-9]*\)\.\([0-9]*\)\.\([0-9]*\)\([ +].*\)\{0,1\}$/\1 \2 \3/p'; }
 
 # True when the version line is older than FLOOR, or unreadable.
 below_floor() {
