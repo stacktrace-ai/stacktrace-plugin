@@ -103,7 +103,7 @@ diagnose() {
     if below_floor "$version"; then
       echo "The plugin needs stacktrace $FLOOR or newer; \`stacktrace\` on PATH is ${version:-unreadable}. If that install came from \`uv tool install stacktrace-cli\`, upgrade it with \`uv tool upgrade stacktrace-cli\`; otherwise correct \`PATH\` or upgrade it directly, then run \`stacktrace daemon start\`."
     else
-      echo "The Stacktrace daemon is not running. Start it with \`stacktrace daemon start\`; /stacktrace:status gives the full diagnosis."
+      echo "The Stacktrace daemon is not running. A detached install starts it with \`stacktrace daemon start\`; a host-managed install recovers its service running \`stacktrace daemon run\`. /stacktrace:status gives the full diagnosis."
     fi
   fi
 }
