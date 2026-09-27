@@ -369,13 +369,12 @@ class DiagnosisTests(unittest.TestCase):
         self.assertEqual(self.shown(), [])
         self.assertEqual(self.calls(), [])
 
-    def test_a_missing_cli_is_named_with_its_install_command(self) -> None:
+    def test_a_missing_cli_routes_to_status(self) -> None:
         self.assertEqual(
             self.shown(cli=False),
             [
-                "The Stacktrace CLI is not installed. Install it with "
-                "`uv tool install stacktrace-cli`, run `stacktrace daemon start`, "
-                "then run /reload-plugins."
+                "The Stacktrace CLI is not on PATH. Run /stacktrace:status for "
+                "installation guidance."
             ],
         )
 
@@ -383,9 +382,8 @@ class DiagnosisTests(unittest.TestCase):
         self.assertEqual(
             self.shown(daemon=False),
             [
-                "The Stacktrace daemon is not running. A detached install starts it with "
-                "`stacktrace daemon start`; a host-managed install recovers its service "
-                "running `stacktrace daemon run`. /stacktrace:status gives the full diagnosis."
+                "The Stacktrace daemon is not reachable. Run /stacktrace:status for "
+                "lifecycle guidance."
             ],
         )
         self.assertEqual(self.calls(), ["--version"])
@@ -403,13 +401,12 @@ class DiagnosisTests(unittest.TestCase):
                 self.assertEqual(len(lines), 1)
                 self.assertIn("needs stacktrace 0.5.2 or newer", lines[0])
                 self.assertIn(version, lines[0])
-                self.assertIn("then run `stacktrace daemon start`", lines[0])
+                self.assertIn("Run /stacktrace:status for upgrade guidance", lines[0])
 
     def test_newer_versions_pass_the_floor(self) -> None:
         expected = [
-            "The Stacktrace daemon is not running. A detached install starts it with "
-            "`stacktrace daemon start`; a host-managed install recovers its service "
-            "running `stacktrace daemon run`. /stacktrace:status gives the full diagnosis."
+            "The Stacktrace daemon is not reachable. Run /stacktrace:status for "
+            "lifecycle guidance."
         ]
         for version in (
             "stacktrace 0.5.2+0f61ea1 (openaca 0.7.0)",
@@ -417,6 +414,27 @@ class DiagnosisTests(unittest.TestCase):
         ):
             with self.subTest(version=version):
                 self.assertEqual(self.shown(daemon=False, STUB_VERSION=version), expected)
+
+    def test_startup_diagnosis_routes_machine_changes_to_status(self) -> None:
+        messages = []
+        for options in (
+            {"cli": False},
+            {"daemon": False},
+            {"daemon": False, "STUB_VERSION": "stacktrace 0.5.1 (openaca 0.7.0)"},
+        ):
+            messages.extend(self.shown(**options))
+
+        self.assertTrue(messages)
+        for message in messages:
+            self.assertIn("/stacktrace:status", message)
+            for command in (
+                "uv tool install",
+                "uv tool upgrade",
+                "stacktrace daemon start",
+                "stacktrace daemon stop",
+                "stacktrace daemon run",
+            ):
+                self.assertNotIn(command, message)
 
     def test_the_variables_that_stop_plugin_monitors_are_named(self) -> None:
         for variable in ("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "DISABLE_TELEMETRY"):
@@ -466,6 +484,28 @@ class LifecycleWorkflowTests(unittest.TestCase):
         )
         self.assertIn("restart its service", status)
         self.assertNotIn("automatic restart", status)
+
+    def test_status_owns_every_machine_remediation_command(self) -> None:
+        status = (ROOT / "skills" / "status" / "SKILL.md").read_text(encoding="utf-8")
+        rules, checks = status.split("## Checks", maxsplit=1)
+
+        for command in (
+            "uv tool install stacktrace-cli",
+            "uv tool upgrade stacktrace-cli",
+            "stacktrace daemon start",
+            "stacktrace daemon stop",
+            "stacktrace daemon run",
+        ):
+            self.assertIn(command, rules)
+            self.assertNotIn(command, checks)
+        for rule in (
+            "**Install or find the CLI**",
+            "**Upgrade the resolved CLI**",
+            "**Start or recover the daemon**",
+            "**Restart onto the installed version**",
+        ):
+            self.assertIn(rule, rules)
+            self.assertIn(rule, checks)
 
     def test_plugin_docs_require_the_released_lifecycle(self) -> None:
         readme = (ROOT / "README.md").read_text(encoding="utf-8")

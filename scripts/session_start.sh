@@ -84,7 +84,7 @@ below_floor() {
 # What is wrong, one line each. Nothing on a healthy machine.
 diagnose() {
   if ! command -v stacktrace >/dev/null 2>&1; then
-    echo "The Stacktrace CLI is not installed. Install it with \`uv tool install stacktrace-cli\`, run \`stacktrace daemon start\`, then run /reload-plugins."
+    echo "The Stacktrace CLI is not on PATH. Run /stacktrace:status for installation guidance."
     return
   fi
   # Claude Code skips plugin monitors under either variable, and the monitor
@@ -101,9 +101,9 @@ diagnose() {
     # no daemon to run, and that is the likelier cause.
     version=$(stacktrace --version 2>/dev/null || true)
     if below_floor "$version"; then
-      echo "The plugin needs stacktrace $FLOOR or newer; \`stacktrace\` on PATH is ${version:-unreadable}. If that install came from \`uv tool install stacktrace-cli\`, upgrade it with \`uv tool upgrade stacktrace-cli\`; otherwise correct \`PATH\` or upgrade it directly, then run \`stacktrace daemon start\`."
+      echo "The plugin needs stacktrace $FLOOR or newer; \`stacktrace\` on PATH is ${version:-unreadable}. Run /stacktrace:status for upgrade guidance."
     else
-      echo "The Stacktrace daemon is not running. A detached install starts it with \`stacktrace daemon start\`; a host-managed install recovers its service running \`stacktrace daemon run\`. /stacktrace:status gives the full diagnosis."
+      echo "The Stacktrace daemon is not reachable. Run /stacktrace:status for lifecycle guidance."
     fi
   fi
 }
