@@ -58,6 +58,9 @@ say which checks did not run.
      (a rollback, or `PATH` resolving an older install). Say so and name the
      fix by applying **Upgrade the resolved CLI**, so `command -v stacktrace`
      is no older than the running daemon. Do not suggest restarting the daemon.
+   - If neither is newer but the rows are not identical, they are different
+     builds of the same release (differing build metadata). Say so and apply
+     **Restart onto the installed version**.
 4. **Monitor connected.** `pgrep -fl "stacktrace daemon subscribe"`. A match
    shows a monitor on this machine, not proof it belongs to this session; say
    that. No match: first check whether
