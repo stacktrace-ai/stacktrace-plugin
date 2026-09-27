@@ -28,10 +28,14 @@ say which checks did not run.
      handle. Do not remove the socket, discover a PID or suggest a force-stop.
 3. **Daemon and CLI versions agree.** When `running: yes`, compare the
    `version:` and `installed:` rows.
-   - If they differ, say the installed upgrade is not active. A detached
-     installation runs `stacktrace daemon stop` followed by `stacktrace daemon
-     start`; a host-managed installation must restart its service. Name both
-     paths without running either.
+   - If `installed:` is newer, say the installed upgrade is not active. A
+     detached installation runs `stacktrace daemon stop` followed by
+     `stacktrace daemon start`; a host-managed installation must restart its service.
+     Name both paths without running either.
+   - If `version:` is newer, the running daemon is ahead of the resolved CLI
+     (a rollback, or `PATH` resolving an older install). Say so and name
+     `uv tool upgrade stacktrace-cli` as the fix. Do not suggest restarting
+     the daemon.
 4. **Monitor connected.** `pgrep -fl "stacktrace daemon subscribe"`. A match
    shows a monitor on this machine, not proof it belongs to this session; say
    that. No match: first check whether
