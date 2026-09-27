@@ -383,8 +383,9 @@ class DiagnosisTests(unittest.TestCase):
         self.assertEqual(
             self.shown(daemon=False),
             [
-                "The Stacktrace daemon is not running. Start it with "
-                "`stacktrace daemon start`; /stacktrace:status gives the full diagnosis."
+                "The Stacktrace daemon is not running. A detached install starts it with "
+                "`stacktrace daemon start`; a host-managed install recovers its service "
+                "running `stacktrace daemon run`. /stacktrace:status gives the full diagnosis."
             ],
         )
         self.assertEqual(self.calls(), ["--version"])
@@ -406,8 +407,9 @@ class DiagnosisTests(unittest.TestCase):
 
     def test_newer_versions_pass_the_floor(self) -> None:
         expected = [
-            "The Stacktrace daemon is not running. Start it with "
-            "`stacktrace daemon start`; /stacktrace:status gives the full diagnosis."
+            "The Stacktrace daemon is not running. A detached install starts it with "
+            "`stacktrace daemon start`; a host-managed install recovers its service "
+            "running `stacktrace daemon run`. /stacktrace:status gives the full diagnosis."
         ]
         for version in (
             "stacktrace 0.5.2+0f61ea1 (openaca 0.7.0)",
