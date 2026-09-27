@@ -6,8 +6,9 @@ Host integrations for Stacktrace: thin adapters over the `stacktrace` CLI and
 its daemon. The Claude Code adapter declares one session-lifetime monitor
 (`stacktrace daemon subscribe --agent-kind claude-code`), a SessionStart hook
 that teaches the notification contract and shows a one-time welcome, and the
-configure, status, and findings skills. Parsing, detection, policy, persistence
-and routing stay in the CLI; this repository owns packaging and lifecycle only.
+status and findings skills. Parsing, detection, policy, persistence, routing
+and daemon lifecycle stay in the CLI; this repository owns packaging and
+Claude-specific integration only.
 
 ## Common commands
 
@@ -30,8 +31,8 @@ reports.
   monitor in `monitors/monitors.json`. Paths go through `${CLAUDE_PLUGIN_ROOT}`.
 - `scripts/validate_plugin.py` states the intended plugin surface; update it
   when the surface changes.
-- The plugin needs `stacktrace-cli` 0.4.0 or newer, the first release with
-  the daemon the monitor subscribes to.
+- The plugin needs `stacktrace-cli` 0.5.2 or newer, the first release where the
+  host or user starts the daemon and the session monitor only subscribes.
 - Hooks forward only session id, transcript path, cwd and event name; never
   prompt, response or tool content. Hooks stay asynchronous and non-blocking.
 

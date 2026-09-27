@@ -24,16 +24,21 @@ credentials and you need read access to it:
 /plugin install stacktrace@stacktrace
 ```
 
-The plugin needs the `stacktrace` CLI, 0.4.0 or newer, which it does not
+The plugin needs the `stacktrace` CLI, 0.5.2 or newer, which it does not
 install (ADR-0008):
 
 ```text
 uv tool install stacktrace-cli
+stacktrace daemon start
 ```
 
-Then run `/reload-plugins` once so Claude starts the monitor with the CLI
-available. Each session start says when the CLI or the daemon is missing, and
-`/stacktrace:status` gives the full diagnosis.
+`daemon start` launches one detached daemon. A host-managed installation runs
+`stacktrace daemon run` under its native service manager instead. Then run
+`/reload-plugins` once so Claude starts the monitor with the CLI available.
+Each session start says when the CLI or the daemon is missing, and
+`/stacktrace:status` gives the full diagnosis. After upgrading the CLI, restart
+the detached daemon with `stacktrace daemon stop` followed by `stacktrace daemon
+start`, or restart the host-managed service.
 
 ## Automatic flow
 

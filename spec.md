@@ -268,17 +268,16 @@ Owns human-facing installation, configuration, daemon status, and finding
 inspection. It uses the daemon and core library rather than being invoked by
 them.
 
-Candidate user surfaces are:
+The user-facing lifecycle and inspection surfaces are:
 
 ```text
-stacktrace configure
+stacktrace daemon start
+stacktrace daemon run
 stacktrace daemon status
+stacktrace daemon stop
 stacktrace daemon subscribe --agent-kind claude-code
 stacktrace findings --agent-kind claude-code [--session <id>]
 ```
-
-Command names remain subject to CLI design review; the ownership split does
-not.
 
 ### Claude plugin
 
@@ -296,9 +295,11 @@ supervision logic.
 
 ### First installation
 
-1. The user installs the Stacktrace plugin and a compatible Stacktrace CLI;
-   installing the CLI is the user's or the environment's job, not the
-   plugin's (ADR-0008).
+1. The user installs the Stacktrace plugin and Stacktrace CLI 0.5.2 or newer,
+   then runs `stacktrace daemon start`; installing the CLI and starting the
+   daemon are the user's or the environment's jobs, not the plugin's
+   (ADR-0008). A host-managed installation runs `stacktrace daemon run` under
+   its native service manager instead.
 2. The next Claude session automatically starts the plugin monitor. If a
    prerequisite is missing, the `SessionStart` hook reports it and names the
    command that resolves it; `/stacktrace:status` gives the deeper ordered
@@ -342,10 +343,11 @@ not lose a finding or route it to another session.
 
 ### Session end
 
-The monitor exits with Claude and closes its socket. The daemon drains the
-session transcript, persists final state, and eventually exits when no active
-session or pending work remains. The MVP does not require a platform service
-manager or a separate supervisor.
+The monitor exits with Claude and closes its socket. The daemon remains
+resident and continues observing sessions. A daemon launched with `daemon
+start` stays down after a later crash until the user starts it again; a host
+that needs automatic restart runs `daemon run` under its native service
+manager.
 
 ## Failure behavior
 

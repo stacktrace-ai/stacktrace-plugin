@@ -21,7 +21,7 @@ WELCOME = ROOT / "scripts" / "welcome.txt"
 STACKTRACE_STUB = """#!/bin/sh
 [ -n "${STUB_LOG:-}" ] && echo "$*" >>"$STUB_LOG"
 case "$1" in
-  --version) echo "${STUB_VERSION:-stacktrace 0.4.0 (openaca 0.7.0)}" ;;
+  --version) echo "${STUB_VERSION:-stacktrace 0.5.2 (openaca 0.7.0)}" ;;
   telemetry) echo "${STUB_TELEMETRY:-on}" ;;
   daemon) exit "${STUB_DAEMON_EXIT:-0}" ;;
 esac
@@ -374,34 +374,47 @@ class DiagnosisTests(unittest.TestCase):
             self.shown(cli=False),
             [
                 "The Stacktrace CLI is not installed. Install it with "
-                "`uv tool install stacktrace-cli`, then run /reload-plugins."
+                "`uv tool install stacktrace-cli`, run `stacktrace daemon start`, "
+                "then run /reload-plugins."
             ],
         )
 
     def test_a_missing_daemon_socket_is_reported(self) -> None:
         self.assertEqual(
-            self.shown(daemon=False), ["The Stacktrace daemon is not running. /stacktrace:status explains why."]
+            self.shown(daemon=False),
+            [
+                "The Stacktrace daemon is not running. Start it with "
+                "`stacktrace daemon start`; /stacktrace:status gives the full diagnosis."
+            ],
         )
         self.assertEqual(self.calls(), ["--version"])
 
     def test_a_cli_below_the_floor_is_the_likelier_cause_of_no_daemon(self) -> None:
-        """0.4.0 is the first release with the daemon the monitor subscribes
-        to. A build from source is held to the same floor."""
-        for version in ("stacktrace 0.3.1 (openaca 0.6.0)", "stacktrace 0.3.1+abc1234 (openaca 0.6.0)"):
+        """0.5.2 is the first release with the host-owned lifecycle contract.
+        A build from source is held to the same floor."""
+        for version in (
+            "stacktrace 0.5.1 (openaca 0.7.0)",
+            "stacktrace 0.5.1+abc1234 (openaca 0.7.0)",
+        ):
             with self.subTest(version=version):
                 lines = self.shown(daemon=False, STUB_VERSION=version)
 
                 self.assertEqual(len(lines), 1)
-                self.assertIn("needs stacktrace 0.4.0 or newer", lines[0])
+                self.assertIn("needs stacktrace 0.5.2 or newer", lines[0])
                 self.assertIn(version, lines[0])
+                self.assertIn("then run `stacktrace daemon start`", lines[0])
 
     def test_newer_versions_pass_the_floor(self) -> None:
-        for version in ("stacktrace 0.4.0+0d20658 (openaca 0.7.0)", "stacktrace 0.10.0 (openaca 0.7.0)"):
+        expected = [
+            "The Stacktrace daemon is not running. Start it with "
+            "`stacktrace daemon start`; /stacktrace:status gives the full diagnosis."
+        ]
+        for version in (
+            "stacktrace 0.5.2+0f61ea1 (openaca 0.7.0)",
+            "stacktrace 0.10.0 (openaca 0.7.0)",
+        ):
             with self.subTest(version=version):
-                self.assertEqual(
-                    self.shown(daemon=False, STUB_VERSION=version),
-                    ["The Stacktrace daemon is not running. /stacktrace:status explains why."],
-                )
+                self.assertEqual(self.shown(daemon=False, STUB_VERSION=version), expected)
 
     def test_the_variables_that_stop_plugin_monitors_are_named(self) -> None:
         for variable in ("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "DISABLE_TELEMETRY"):
@@ -415,11 +428,50 @@ class DiagnosisTests(unittest.TestCase):
         """Stateless: whatever it finds, HOME holds only what the test put
         there."""
         before = sorted(str(q) for q in Path(self.home.name).rglob("*"))
-        for options in ({"cli": False}, {"daemon": False}, {"STUB_VERSION": "stacktrace 0.3.1 (x)"}):
+        for options in ({"cli": False}, {"daemon": False}, {"STUB_VERSION": "stacktrace 0.5.1 (x)"}):
             with self.subTest(options=options):
                 self.shown(**options)
         after = sorted(str(q) for q in Path(self.home.name).rglob("*") if q != self.log)
         self.assertEqual(after, before)
+
+
+class LifecycleWorkflowTests(unittest.TestCase):
+    """The plugin describes the lifecycle Stacktrace 0.5.2 actually exposes."""
+
+    def test_status_uses_status_rows_instead_of_the_command_exit_code(self) -> None:
+        status = (ROOT / "skills" / "status" / "SKILL.md").read_text(encoding="utf-8")
+
+        self.assertIn("`running: no`", status)
+        self.assertIn("`running: unresponsive`", status)
+        self.assertIn("no readable `running:` row", status)
+        self.assertNotIn("Exit 1", status)
+
+    def test_status_checks_why_claude_skipped_the_monitor(self) -> None:
+        status = (ROOT / "skills" / "status" / "SKILL.md").read_text(encoding="utf-8")
+
+        self.assertIn("`CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC`", status)
+        self.assertIn("`DISABLE_TELEMETRY`", status)
+
+    def test_status_names_explicit_version_restart_paths(self) -> None:
+        status = (ROOT / "skills" / "status" / "SKILL.md").read_text(encoding="utf-8")
+        single_line = " ".join(status.split())
+
+        self.assertIn("`version:`", status)
+        self.assertIn("`installed:`", status)
+        self.assertIn(
+            "`stacktrace daemon stop` followed by `stacktrace daemon start`",
+            single_line,
+        )
+        self.assertIn("restart its service", status)
+        self.assertNotIn("automatic restart", status)
+
+    def test_plugin_docs_require_the_released_lifecycle(self) -> None:
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        instructions = (ROOT / "CLAUDE.md").read_text(encoding="utf-8")
+
+        for document in (readme, instructions):
+            self.assertIn("0.5.2", document)
+            self.assertNotIn("0.4.0", document)
 
 
 class WelcomeStateTests(unittest.TestCase):
