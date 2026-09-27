@@ -17,9 +17,11 @@ say which checks did not run.
      then `/reload-plugins`.
    - Older than 0.5.2: `uv tool upgrade stacktrace-cli` if that install is the
      one on `PATH`, otherwise correct `PATH` or upgrade the resolved
-     installation directly; then `stacktrace daemon start`. 0.5.2 is the first
-     release where the host or user starts the daemon and the session monitor
-     only subscribes.
+     installation directly. Then restart any daemon left running from before
+     the upgrade: a detached installation runs `stacktrace daemon stop`
+     followed by `stacktrace daemon start`; a host-managed installation must
+     restart its service. 0.5.2 is the first release where the host or user
+     starts the daemon and the session monitor only subscribes.
 2. **Daemon reachable.** `stacktrace daemon status`.
    - Read the `running:` row; command success alone does not mean the daemon is
      running.
