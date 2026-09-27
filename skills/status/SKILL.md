@@ -15,9 +15,11 @@ say which checks did not run.
 1. **CLI on PATH.** `command -v stacktrace`, then `stacktrace --version`.
    - Absent: `uv tool install stacktrace-cli`, then `stacktrace daemon start`,
      then `/reload-plugins`.
-   - Older than 0.5.2: `uv tool upgrade stacktrace-cli`, then `stacktrace
-     daemon start`. 0.5.2 is the first release where the host or user starts
-     the daemon and the session monitor only subscribes.
+   - Older than 0.5.2: `uv tool upgrade stacktrace-cli` if that install is the
+     one on `PATH`, otherwise correct `PATH` or upgrade the resolved
+     installation directly; then `stacktrace daemon start`. 0.5.2 is the first
+     release where the host or user starts the daemon and the session monitor
+     only subscribes.
 2. **Daemon reachable.** `stacktrace daemon status`.
    - Read the `running:` row; command success alone does not mean the daemon is
      running.
