@@ -101,7 +101,7 @@ diagnose() {
     # no daemon to run, and that is the likelier cause.
     version=$(stacktrace --version 2>/dev/null || true)
     if below_floor "$version"; then
-      echo "The plugin needs stacktrace $FLOOR or newer; \`stacktrace\` on PATH is ${version:-unreadable}. Upgrade it with \`uv tool upgrade stacktrace-cli\`, then run \`stacktrace daemon start\`."
+      echo "The plugin needs stacktrace $FLOOR or newer; \`stacktrace\` on PATH is ${version:-unreadable}. If that install came from \`uv tool install stacktrace-cli\`, upgrade it with \`uv tool upgrade stacktrace-cli\`; otherwise correct \`PATH\` or upgrade it directly, then run \`stacktrace daemon start\`."
     else
       echo "The Stacktrace daemon is not running. Start it with \`stacktrace daemon start\`; /stacktrace:status gives the full diagnosis."
     fi
