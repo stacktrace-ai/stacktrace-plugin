@@ -33,9 +33,11 @@ say which checks did not run.
      `stacktrace daemon start`; a host-managed installation must restart its service.
      Name both paths without running either.
    - If `version:` is newer, the running daemon is ahead of the resolved CLI
-     (a rollback, or `PATH` resolving an older install). Say so and name
-     `uv tool upgrade stacktrace-cli` as the fix. Do not suggest restarting
-     the daemon.
+     (a rollback, or `PATH` resolving an older install). Say so and name the
+     fix: `uv tool upgrade stacktrace-cli` if that install is the one on
+     `PATH`, otherwise correct `PATH` or upgrade the resolved installation
+     directly so `command -v stacktrace` is no older than the running
+     daemon. Do not suggest restarting the daemon.
 4. **Monitor connected.** `pgrep -fl "stacktrace daemon subscribe"`. A match
    shows a monitor on this machine, not proof it belongs to this session; say
    that. No match: first check whether
