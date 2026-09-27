@@ -15,7 +15,7 @@ screen report telemetry state instead of assuming it.
 
 ## Context
 
-Stacktrace ADR-0048 moves daemon lifecycle out of agent adapters. The host or a
+Stacktrace ADR-0072 moves daemon lifecycle out of agent adapters. The host or a
 person starts the daemon; a monitor only subscribes. The plugin still crosses
 the same ownership boundary through `/stacktrace:configure`, which installs the
 CLI with `uv tool install`. Sandbox setup already owns that installation, and a
@@ -49,9 +49,10 @@ the environment's setup mechanism.
    Missing prerequisites name the next command: `uv tool install
    stacktrace-cli`, `stacktrace daemon start`, or `/reload-plugins`; an
    unsupported host or missing `PushNotification` names the Claude Code
-   upgrade instead. A version mismatch says the automatic restart has not
-   completed and asks the user to check again. The skill does not offer to
-   run a mutating command.
+   upgrade instead. A version mismatch names the explicit restart: `daemon
+   stop` followed by `daemon start` for a detached installation, or a service
+   restart for a host-managed installation. The skill does not offer to run a
+   mutating command.
 2. **Report a broken prerequisite at every affected session start.** The hook
    emits one short `systemMessage` when the CLI is absent or the daemon socket
    is absent, including the relevant command. The socket test stays in shell so
@@ -78,20 +79,19 @@ the environment's setup mechanism.
    regardless.
 5. **Two more startup lines, neither costing a healthy session anything.**
    When the daemon socket is absent, the hook runs `stacktrace --version`
-   before blaming the daemon: a CLI older than 0.4.0, the first release with
-   the daemon the monitor subscribes to, is the likelier cause, and the line
-   names it and its upgrade command. When
+   before blaming the daemon: a CLI older than 0.5.2 does not implement the
+   host-owned lifecycle contract, and the line names it, its upgrade command
+   and `stacktrace daemon start`. When
    `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` or `DISABLE_TELEMETRY` is set,
    the hook names it, because Claude Code skips plugin monitors under either.
    Both are shell tests except the version read, which runs only on the
    broken path.
 
-Until stacktrace ADR-0048 ships `stacktrace daemon start`, no message names
-that command. The startup line says the daemon is not running and points at
-`/stacktrace:status`, which gives today's fix: the session monitor still starts
-the daemon, so `/reload-plugins` or a new session. The daemon-and-CLI version
-check in `/stacktrace:status` reports that it cannot run yet, because the CLI
-does not report the running daemon's version.
+Stacktrace 0.5.2 implements ADR-0072. The startup line names `stacktrace daemon
+start` directly. `daemon status` reports `running: yes`, `running: no` or
+`running: unresponsive`; for a running daemon it also reports both the daemon's
+`version:` and the CLI's `installed:` build. `/stacktrace:status` reads those
+rows rather than treating the command's exit status as daemon availability.
 
 When `stacktrace telemetry` prints anything other than `off`, including
 nothing, the welcome shows the `(on)` screen: an unreadable state errs toward
@@ -122,7 +122,9 @@ decisions otherwise remain in force.
 ## Consequences
 
 Every plugin path becomes read-only with respect to the machine. Installation,
-daemon startup and telemetry changes have one owner each, outside the plugin.
+daemon startup, restart policy and telemetry changes have one owner each,
+outside the plugin. A detached daemon remains resident after the agent session
+ends; continuous crash recovery belongs to the host's service manager.
 
 A user who installs only the plugin no longer gets silence: the first startup
 line explains which prerequisite is missing and names the command that resolves
@@ -141,14 +143,3 @@ The shell socket test can mistake a stale socket for a running daemon.
 Whether plugin monitors run in Claude Code cloud sessions is unverified.
 Organization-required plugins currently do not sync there, which is a separate
 host limitation.
-
-Whether the daemon is still there for the *next* session is unresolved.
-`spec.md`'s session-end design drains, persists, and exits the daemon once no
-session or pending work remains, and explicitly needs no supervisor. Once
-`subscribe` no longer starts the daemon, an idle-exited daemon leaves the next
-session's monitor unable to connect until someone runs `stacktrace daemon
-start` again, degrading "automatic" monitoring into a per-session manual step.
-Keeping the daemon resident, adding a host-level supervisor that starts it per
-session, or retaining some idempotent-start allowance are the candidate
-resolutions; picking one is host/CLI lifecycle work for `stacktrace-ai/stacktrace`
-ADR-0048 (stacktrace-ai/stacktrace#66), not a decision this ADR can make alone.

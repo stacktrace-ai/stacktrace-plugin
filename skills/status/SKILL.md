@@ -13,20 +13,31 @@ Check in this order. Stop at the first failure, report it with its fix, and
 say which checks did not run.
 
 1. **CLI on PATH.** `command -v stacktrace`, then `stacktrace --version`.
-   - Absent: `uv tool install stacktrace-cli`, then `/reload-plugins`.
-   - Older than 0.4.0: `uv tool upgrade stacktrace-cli`. 0.4.0 is the first
-     release with the daemon the monitor subscribes to.
+   - Absent: `uv tool install stacktrace-cli`, then `stacktrace daemon start`,
+     then `/reload-plugins`.
+   - Older than 0.5.2: `uv tool upgrade stacktrace-cli`, then `stacktrace
+     daemon start`. 0.5.2 is the first release where the host or user starts
+     the daemon and the session monitor only subscribes.
 2. **Daemon reachable.** `stacktrace daemon status`.
-   - Exit 1: the daemon is not running. Today the session monitor starts it,
-     so `/reload-plugins` or a new session is the fix. If
-     `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` or `DISABLE_TELEMETRY` is set,
-     Claude Code skips plugin monitors and nothing starts it; name the
-     variable.
-3. **Daemon and CLI versions agree.** The CLI does not yet report the running
-   daemon's version, so this check cannot run. Say so and continue.
+   - Read the `running:` row; command success alone does not mean the daemon is
+     running.
+   - If the command produces no readable `running:` row, report its output and
+     stop.
+   - `running: no`: the fix is `stacktrace daemon start`.
+   - `running: unresponsive`: report it for the host supervisor or operator to
+     handle. Do not remove the socket, discover a PID or suggest a force-stop.
+3. **Daemon and CLI versions agree.** When `running: yes`, compare the
+   `version:` and `installed:` rows.
+   - If they differ, say the installed upgrade is not active. A detached
+     installation runs `stacktrace daemon stop` followed by `stacktrace daemon
+     start`; a host-managed installation must restart its service. Name both
+     paths without running either.
 4. **Monitor connected.** `pgrep -fl "stacktrace daemon subscribe"`. A match
    shows a monitor on this machine, not proof it belongs to this session; say
-   that. No match: run `claude --version` and report it, and say the monitor
+   that. No match: first check whether
+   `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` or `DISABLE_TELEMETRY` is set;
+   Claude Code skips plugin monitors under either variable, so name it as the
+   failure. Otherwise run `claude --version` and report it, and say the monitor
    declaration needs an interactive Claude Code CLI session. The fix is
    `/reload-plugins`, or a Claude Code upgrade if the host cannot run plugin
    monitors.
