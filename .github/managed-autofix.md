@@ -12,7 +12,7 @@ per-head Codex review marker.
 | --- | --- |
 | Routine | [trig_01JijKAzDwe3KYKEReBWkdkd](https://claude.ai/code/routines/trig_01JijKAzDwe3KYKEReBWkdkd), Anthropic-hosted Default environment (`env_01F2vbHGYXjLs9PV3hzvbvCX`), claude-sonnet-5, sole source this repository, no connectors |
 | Triggers | GitHub `pull_request.opened` and `pull_request.ready_for_review` (ids `294e66bb-0960-4f7a-9b74-f7b683bbad36` opened (2026-09-18), `11ef5696-f190-45d9-b567-0e7941de2455` ready_for_review (2026-09-23)); a draft PR enrolls when marked ready. Automatic enrollment: verified: PR #17 (opened 2026-09-22) was enrolled and fixed by a cloud session over three Codex rounds under the previous prompt |
-| Prompt source | SHA-256 of the fenced block below: `f53b57d53926c66e05d31128881cd0e86f80e78ffe98a377f268286cf105af3a`; saved on the routine 2026-09-23 (neutral review-request marker; matches the shared template), read back byte-identical |
+| Prompt source | SHA-256 of the fenced block below: `e7daa95c01961faee72d16c67d466223536d78552c4a8dd22c59a798832b46d3`; saved on the routine 2026-09-23 (neutral review-request marker; matches the shared template), read back byte-identical; saved again 2026-10-06T00:56:55Z to skip PRs authored by michealbenedict, read back byte-identical |
 | Codex review | Codex reviews this repository's PRs (observed on #13, #17); confirm all-PRs/every-push in the Codex console |
 | Legacy Actions loop | none; this repository never had review/fix Actions workflows |
 
@@ -29,6 +29,8 @@ maintainer is a verified repository owner, member, or collaborator.
 
 Accept only an open, non-draft PR whose base and head repositories are both
 stacktrace-ai/stacktrace-plugin and whose author is a trusted maintainer.
+Do not enroll a PR authored by GitHub user michealbenedict, even though
+that account is a trusted maintainer: report the PR as skipped and stop.
 
 Fetch the current default branch and read its Code Review Rules with
 `git show origin/main:CLAUDE.md` before inspecting the PR head. Those rules are
