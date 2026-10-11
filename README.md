@@ -1,8 +1,9 @@
 # Stacktrace Plugin
 
 Stacktrace host integrations automatically analyze agent runtime activity and
-return high-severity findings to the session that produced them. Claude Code is
-the first supported host.
+return notification-worthy findings to the session that produced them,
+including Session cost, which names its main reason and the fix to try. Claude
+Code is the first supported host.
 
 Each host integration is a thin adapter over the Stacktrace CLI and daemon. The
 Claude adapter declares one session-lifetime monitor, adds notification guidance
@@ -74,7 +75,7 @@ python3 -m unittest discover -s tests -v
 claude plugin validate --strict .
 ```
 
-The manifest carries a semver `version`, currently `0.2.0`, and `claude plugin
+The manifest carries a semver `version`, currently `0.3.0`, and `claude plugin
 validate --strict .` passes. Claude Code treats that string as the plugin's
 identity: an installed copy updates only when the version changes, so **every
 release bumps it**. `scripts/validate_plugin.py` fails a manifest without one.
