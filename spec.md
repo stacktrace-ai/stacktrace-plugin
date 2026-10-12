@@ -419,8 +419,8 @@ No active session should cause full rescans on every filesystem event.
 - Two sessions in the same repository receive only their own findings.
 - A high-confidence high-severity test finding produces one
   `STACKTRACE_NOTIFY_V1` event and prompts Claude to call `PushNotification`.
-- Low-severity findings and daemon diagnostics do not enter Claude through
-  monitor stdout.
+- Other low-severity findings and daemon diagnostics do not enter Claude
+  through monitor stdout; Session cost does, at any severity.
 - Disconnecting and reconnecting a monitor does not lose a finding.
 - Restarting the daemon preserves incremental cursors and finding identity.
 - `/clear`, `/resume`, and two parallel sessions preserve exact session
