@@ -80,3 +80,43 @@ identity: an installed copy updates only when the version changes, so **every
 release bumps it**. `scripts/validate_plugin.py` fails a manifest without one.
 
 Review automation: [managed PR review and fixes](.github/managed-autofix.md).
+
+
+## Hook policy admission
+
+Requires **Claude Code 2.1.302 or newer** and the CLI release containing
+`stacktrace remote policy hooks`. Upgrade the CLI before installing this plugin
+revision: missing or older CLI commands block matched actions. With a compatible
+CLI, admission is off until explicitly enabled.
+
+After enrolling the CLI and starting its user daemon:
+
+```sh
+stacktrace remote policy hooks enable
+stacktrace remote policy hooks status
+```
+
+Start a new Claude session. The synchronous PreToolUse hook covers MCP tools
+using native server provenance, Skill invocations and namespaced plugin agents.
+UserPromptExpansion covers direct slash-command/skill expansion. An allow emits
+no native permission grant. Unknown subjects, stale or incomplete required risk
+evidence, protocol errors and daemon outages deny covered actions.
+
+Policies retain OpenACA MCP/plugin allowlists and denylists, category defaults,
+skill defaults, vulnerability gates and posture gates. Plugin children inherit
+their owning plugin's decision. The plugin contains no evaluator, scanner,
+policy cache or privileged helper.
+
+Coverage is **hook-visible use**. Plugin loading, startup hooks, MCP connection,
+resources/prompts, LSP startup and preloaded skill context can occur before a
+blocking hook. Disabled or unlaunched hooks remain a host coverage gap.
+In-session `/cd` configuration switching is unsupported and cannot always be
+distinguished from ordinary shell directory changes; start a new session in the
+target project. Status reports declarations and observed calls, not proof of
+complete mediation or current adapter health.
+
+For old root-owned managed policies, enable and verify hooks first, then run
+`stacktrace remote policy hooks migration` for explicit one-time administrator
+cleanup instructions. Ordinary installation and ongoing admission need no sudo.
+The shared evidence API must be published and pinned before activation; this
+source change does not publish a release or alter an existing enrollment.
