@@ -39,7 +39,7 @@ reports.
   contacting the daemon. It never evaluates policy or scans in this repo.
 - Admission hooks require the CLI release containing `remote policy hooks`
   and Claude Code 2.1.302 or newer. Upgrade the CLI before this plugin.
-  Missing/older CLI commands fail closed for matched actions. On a compatible
+  Missing/older CLI commands continue without a policy decision. On a compatible
   CLI the adapter is inert until `remote policy hooks enable` succeeds.
 
 ---
