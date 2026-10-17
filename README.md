@@ -90,7 +90,7 @@ A missing or older CLI command continues without a policy decision.
 A compatible CLI keeps admission off until activation succeeds.
 
 Enroll the CLI and start its user daemon.
-Then run:
+Run:
 
 ```sh
 stacktrace remote policy hooks enable
