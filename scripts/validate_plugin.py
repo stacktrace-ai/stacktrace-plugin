@@ -83,13 +83,13 @@ def main() -> int:
                 "type": "command",
                 "command": "stacktrace remote policy hooks admit",
                 "timeout": 5,
-                "onFailure": "block",
+                "onFailure": "continue",
             }],
         }
         if event == "PreToolUse":
             expected_group["matcher"] = "^(mcp__.*|Skill|Agent|Task)$"
         if configured[event] != [expected_group]:
-            fail(f"{event} must use bounded synchronous fail-closed admission")
+            fail(f"{event} must use bounded synchronous admission that continues on failure")
 
     expected_skills = {"findings", "status"}
     skills_root = ROOT / "skills"

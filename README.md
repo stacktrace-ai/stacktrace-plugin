@@ -86,7 +86,7 @@ Review automation: [managed PR review and fixes](.github/managed-autofix.md).
 
 Requires **Claude Code 2.1.302 or newer** and the CLI release containing
 `stacktrace remote policy hooks`. Upgrade the CLI before installing this plugin
-revision: missing or older CLI commands block matched actions. With a compatible
+revision. Missing or older CLI commands continue without a policy decision. With a compatible
 CLI, admission is off until explicitly enabled.
 
 After enrolling the CLI and starting its user daemon:
@@ -99,8 +99,11 @@ stacktrace remote policy hooks status
 Start a new Claude session. The synchronous PreToolUse hook covers MCP tools
 using native server provenance, Skill invocations and namespaced plugin agents.
 UserPromptExpansion covers direct slash-command/skill expansion. An allow emits
-no native permission grant. Unknown subjects, stale or incomplete required risk
-evidence, protocol errors and daemon outages deny covered actions.
+no native permission grant. Unknown or ambiguous subjects follow their known
+category default. Missing vulnerability coordinates do not add a block. Stale
+or unavailable checks, protocol errors, daemon outages and hook launch/timeout
+failures continue through Claude’s normal permissions. Confirmed policy blocks
+and configured blocked defaults still deny.
 
 Policies retain OpenACA MCP/plugin allowlists and denylists, category defaults,
 skill defaults, vulnerability gates and posture gates. Plugin children inherit

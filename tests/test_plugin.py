@@ -617,12 +617,12 @@ if __name__ == "__main__":
 
 
 class PolicyHookContractTests(unittest.TestCase):
-    def test_admission_is_synchronous_and_host_blocks_launch_failures(self):
+    def test_admission_is_synchronous_and_host_continues_on_launch_failures(self):
         document = json.loads((ROOT / "hooks" / "hooks.json").read_text())
         for event in ("PreToolUse", "UserPromptExpansion"):
             handler = document["hooks"][event][0]["hooks"][0]
             self.assertNotIn("async", handler)
-            self.assertEqual(handler["onFailure"], "block")
+            self.assertEqual(handler["onFailure"], "continue")
             self.assertLessEqual(handler["timeout"], 5)
             self.assertEqual(handler["command"], "stacktrace remote policy hooks admit")
 
