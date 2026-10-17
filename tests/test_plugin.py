@@ -328,7 +328,7 @@ class PluginContractTests(unittest.TestCase):
 
     def test_plugin_has_no_turn_or_session_end_detection_hook(self) -> None:
         document = json.loads((ROOT / "hooks" / "hooks.json").read_text(encoding="utf-8"))
-        self.assertEqual(set(document["hooks"]), {"SessionStart"})
+        self.assertEqual(set(document["hooks"]), {"SessionStart", "PreToolUse", "UserPromptExpansion"})
 
     def test_monitor_invokes_the_stacktrace_subscription_directly(self) -> None:
         monitors = json.loads(
@@ -512,7 +512,7 @@ class LifecycleWorkflowTests(unittest.TestCase):
 
     def test_plugin_docs_require_the_released_lifecycle(self) -> None:
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
-        instructions = (ROOT / "CLAUDE.md").read_text(encoding="utf-8")
+        instructions = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
 
         for document in (readme, instructions):
             self.assertIn("0.5.2", document)
@@ -614,3 +614,22 @@ class WelcomeScreenTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PolicyHookContractTests(unittest.TestCase):
+    def test_admission_is_synchronous_and_host_blocks_launch_failures(self):
+        document = json.loads((ROOT / "hooks" / "hooks.json").read_text())
+        for event in ("PreToolUse", "UserPromptExpansion"):
+            handler = document["hooks"][event][0]["hooks"][0]
+            self.assertNotIn("async", handler)
+            self.assertEqual(handler["onFailure"], "block")
+            self.assertLessEqual(handler["timeout"], 5)
+            self.assertEqual(handler["command"], "stacktrace remote policy hooks admit")
+
+    def test_native_matching_covers_mcp_skill_and_plugin_agent_paths(self):
+        document = json.loads((ROOT / "hooks" / "hooks.json").read_text())
+        matcher = re.compile(document["hooks"]["PreToolUse"][0]["matcher"])
+        for tool in ("mcp__github__read", "Skill", "Agent", "Task"):
+            self.assertIsNotNone(matcher.fullmatch(tool))
+        for tool in ("Bash", "Read", "Write"):
+            self.assertIsNone(matcher.fullmatch(tool))

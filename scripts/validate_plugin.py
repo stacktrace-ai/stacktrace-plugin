@@ -64,8 +64,8 @@ def main() -> int:
         fail("plugin must declare exactly one direct Stacktrace session monitor")
 
     configured = hooks.get("hooks") if isinstance(hooks, dict) else None
-    if not isinstance(configured, dict) or set(configured) != {"SessionStart"}:
-        fail("hooks must contain only SessionStart guidance")
+    if not isinstance(configured, dict) or set(configured) != {"SessionStart", "PreToolUse", "UserPromptExpansion"}:
+        fail("hooks must contain SessionStart guidance and both synchronous admission events")
     expected_handler = {
         "type": "command",
         "command": 'sh "${CLAUDE_PLUGIN_ROOT}/scripts/session_start.sh"',
@@ -76,6 +76,20 @@ def main() -> int:
         fail("SessionStart must contain one command handler")
     if handler != expected_handler:
         fail("SessionStart must invoke only the notification guidance script")
+
+    for event in ("PreToolUse", "UserPromptExpansion"):
+        expected_group = {
+            "hooks": [{
+                "type": "command",
+                "command": "stacktrace remote policy hooks admit",
+                "timeout": 5,
+                "onFailure": "block",
+            }],
+        }
+        if event == "PreToolUse":
+            expected_group["matcher"] = "^(mcp__.*|Skill|Agent|Task)$"
+        if configured[event] != [expected_group]:
+            fail(f"{event} must use bounded synchronous fail-closed admission")
 
     expected_skills = {"findings", "status"}
     skills_root = ROOT / "skills"

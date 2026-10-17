@@ -1,5 +1,5 @@
 {
-  "description": "Teach Claude how to deliver sanitized Stacktrace monitor events.",
+  "description": "Teach notification delivery and request synchronous hook-visible policy admission.",
   "hooks": {
     "SessionStart": [
       {
@@ -7,6 +7,31 @@
           {
             "type": "command",
             "command": "sh \"${CLAUDE_PLUGIN_ROOT}/scripts/session_start.sh\""
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "stacktrace remote policy hooks admit",
+            "timeout": 5,
+            "onFailure": "block"
+          }
+        ],
+        "matcher": "^(mcp__.*|Skill|Agent|Task)$"
+      }
+    ],
+    "UserPromptExpansion": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "stacktrace remote policy hooks admit",
+            "timeout": 5,
+            "onFailure": "block"
           }
         ]
       }
