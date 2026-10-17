@@ -104,11 +104,14 @@ MCP selection uses native server provenance.
 Neither allow nor defer grants a native permission.
 
 Unknown or ambiguous subjects use the known category default.
-Missing or expired evidence also uses a known default where possible.
+Before the first completed snapshot, missing evidence uses a known default where possible.
+Failed refreshes retain the last completed decisions and defaults.
+Age alone does not remove those decisions.
 A configured blocked default still applies.
 Missing vulnerability coordinates add no block.
+
 Unavailable checks, protocol errors, daemon outages and hook launch or timeout failures continue through native permissions.
-Confirmed policy restrictions and risk matches still block when their current evidence is valid.
+Confirmed policy restrictions and risk matches block according to the active snapshot.
 
 Policies retain OpenACA MCP/plugin allowlists and denylists, category defaults,
 skill defaults, vulnerability gates and posture gates. Plugin children inherit
