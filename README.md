@@ -74,7 +74,7 @@ python3 -m unittest discover -s tests -v
 claude plugin validate --strict .
 ```
 
-The manifest carries a semver `version`, currently `0.2.0`, and `claude plugin
+The manifest carries a semver `version`, currently `0.3.0`, and `claude plugin
 validate --strict .` passes. Claude Code treats that string as the plugin's
 identity: an installed copy updates only when the version changes, so **every
 release bumps it**. `scripts/validate_plugin.py` fails a manifest without one.
@@ -84,26 +84,31 @@ Review automation: [managed PR review and fixes](.github/managed-autofix.md).
 
 ## Hook policy admission
 
-Requires **Claude Code 2.1.302 or newer** and the CLI release containing
-`stacktrace remote policy hooks`. Upgrade the CLI before installing this plugin
-revision. Missing or older CLI commands continue without a policy decision. With a compatible
-CLI, admission is off until explicitly enabled.
+Require **Claude Code 2.1.302 or newer** and the CLI release containing `stacktrace remote policy hooks`.
+Upgrade the CLI before this plugin.
+A missing or older CLI command continues without a policy decision.
+A compatible CLI keeps admission off until activation succeeds.
 
-After enrolling the CLI and starting its user daemon:
+Enroll the CLI and start its user daemon.
+Then run:
 
 ```sh
 stacktrace remote policy hooks enable
 stacktrace remote policy hooks status
 ```
 
-Start a new Claude session. The synchronous PreToolUse hook covers MCP tools
-using native server provenance, Skill invocations and namespaced plugin agents.
-UserPromptExpansion covers direct slash-command/skill expansion. An allow emits
-no native permission grant. Unknown or ambiguous subjects follow their known
-category default. Missing vulnerability coordinates do not add a block. Stale
-or unavailable checks, protocol errors, daemon outages and hook launch/timeout
-failures continue through Claude’s normal permissions. Confirmed policy blocks
-and configured blocked defaults still deny.
+Start a new Claude session.
+The synchronous `PreToolUse` hook covers MCP tools, Skill calls and namespaced plugin-agent calls.
+MCP selection uses native server provenance.
+`UserPromptExpansion` covers direct slash-command expansion.
+Neither allow nor defer grants a native permission.
+
+Unknown or ambiguous subjects use the known category default.
+Missing or expired evidence also uses a known default where possible.
+A configured blocked default still applies.
+Missing vulnerability coordinates add no block.
+Unavailable checks, protocol errors, daemon outages and hook launch or timeout failures continue through native permissions.
+Confirmed policy restrictions and risk matches still block when their current evidence is valid.
 
 Policies retain OpenACA MCP/plugin allowlists and denylists, category defaults,
 skill defaults, vulnerability gates and posture gates. Plugin children inherit
