@@ -74,7 +74,7 @@ python3 -m unittest discover -s tests -v
 claude plugin validate --strict .
 ```
 
-The manifest carries a semver `version`, currently `0.3.0`, and `claude plugin
+The manifest carries a semver `version`, currently `0.3.1`, and `claude plugin
 validate --strict .` passes. Claude Code treats that string as the plugin's
 identity: an installed copy updates only when the version changes, so **every
 release bumps it**. `scripts/validate_plugin.py` fails a manifest without one.
@@ -131,3 +131,17 @@ For old root-owned managed policies, enable and verify hooks first, then run
 cleanup instructions. Ordinary installation and ongoing admission need no sudo.
 The shared evidence API must be published and pinned before activation; this
 source change does not publish a release or alter an existing enrollment.
+
+
+## CLI compatibility failures
+
+An older CLI can exit `2` for an unknown policy-hook command.
+Claude treats exit `2` as an explicit block on admission events.
+`onFailure: "continue"` does not override that verdict.
+See [Claude hook exit handling](https://code.claude.com/docs/en/hooks#exit-code-2).
+
+The plugin forwards CLI output only after a successful exit.
+Failed or missing CLI commands produce no policy verdict.
+The hook command also guards a missing wrapper script.
+Successful JSON policy denials still block the action.
+Claude applies its normal permissions when Stacktrace produces no verdict.

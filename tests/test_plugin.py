@@ -624,7 +624,7 @@ class PolicyHookContractTests(unittest.TestCase):
             self.assertNotIn("async", handler)
             self.assertEqual(handler["onFailure"], "continue")
             self.assertLessEqual(handler["timeout"], 5)
-            self.assertEqual(handler["command"], "stacktrace remote policy hooks admit")
+            self.assertEqual(handler["command"], 'sh "${CLAUDE_PLUGIN_ROOT}/scripts/policy_hook.sh" admit 2>/dev/null || true')
 
     def test_native_matching_covers_mcp_skill_and_plugin_agent_paths(self):
         document = json.loads((ROOT / "hooks" / "hooks.json").read_text())
@@ -633,3 +633,46 @@ class PolicyHookContractTests(unittest.TestCase):
             self.assertIsNotNone(matcher.fullmatch(tool))
         for tool in ("Bash", "Read", "Write"):
             self.assertIsNone(matcher.fullmatch(tool))
+
+
+class PolicyAdapterExitTests(unittest.TestCase):
+    def run_adapter(self, body, *arguments):
+        with tempfile.TemporaryDirectory() as directory:
+            binary = Path(directory) / "stacktrace"
+            binary.write_text("#!/bin/sh\n" + body)
+            binary.chmod(0o755)
+            return subprocess.run(
+                ["/bin/sh", str(ROOT / "scripts" / "policy_hook.sh"), *arguments],
+                input='{"hook_event_name":"PreToolUse"}', text=True, capture_output=True,
+                env={"PATH": directory}, check=False,
+            )
+    def test_unknown_cli_commands_and_other_failures_emit_no_verdict(self):
+        for code in (1, 2, 127, 130):
+            with self.subTest(code=code):
+                result = self.run_adapter(
+                    'printf \'{"decision":"block","reason":"partial output"}\'\n'
+                    f"echo incompatible CLI >&2\nexit {code}\n", "admit")
+                self.assertEqual((result.returncode, result.stdout, result.stderr), (0, "", ""))
+    def test_confirmed_successful_denials_reach_claude(self):
+        verdict = '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny"}}'
+        result = self.run_adapter("printf '%s' '" + verdict + "'\n", "admit")
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(json.loads(result.stdout), json.loads(verdict))
+    def test_missing_cli_emits_no_verdict(self):
+        with tempfile.TemporaryDirectory() as directory:
+            result = subprocess.run(
+                ["/bin/sh", str(ROOT / "scripts" / "policy_hook.sh"), "admit"],
+                input='{}', text=True, capture_output=True,
+                env={"PATH": directory}, check=False,
+            )
+            self.assertEqual((result.returncode, result.stdout, result.stderr), (0, "", ""))
+    def test_missing_plugin_script_cannot_leak_a_shell_exit_two(self):
+        manifest = json.loads((ROOT / "hooks/hooks.json").read_text())
+        for event, index in (("PreToolUse", 0), ("UserPromptExpansion", 0)):
+            command = manifest["hooks"][event][0]["hooks"][index]["command"]
+            with self.subTest(event=event), tempfile.TemporaryDirectory() as directory:
+                result = subprocess.run(
+                    ["/bin/sh", "-c", command], input='{}', text=True, capture_output=True,
+                    env={"PATH": "/bin", "CLAUDE_PLUGIN_ROOT": directory}, check=False,
+                )
+                self.assertEqual((result.returncode, result.stdout, result.stderr), (0, "", ""))

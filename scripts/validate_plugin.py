@@ -81,7 +81,7 @@ def main() -> int:
         expected_group = {
             "hooks": [{
                 "type": "command",
-                "command": "stacktrace remote policy hooks admit",
+                "command": 'sh "${CLAUDE_PLUGIN_ROOT}/scripts/policy_hook.sh" admit 2>/dev/null || true',
                 "timeout": 5,
                 "onFailure": "continue",
             }],
@@ -90,6 +90,9 @@ def main() -> int:
             expected_group["matcher"] = "^(mcp__.*|Skill|Agent|Task)$"
         if configured[event] != [expected_group]:
             fail(f"{event} must use bounded synchronous admission that continues on failure")
+
+    if not (ROOT / "scripts" / "policy_hook.sh").is_file():
+        fail("scripts/policy_hook.sh must normalize failed CLI exits")
 
     expected_skills = {"findings", "status"}
     skills_root = ROOT / "skills"
