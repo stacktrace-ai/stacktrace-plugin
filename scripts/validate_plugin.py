@@ -72,7 +72,7 @@ def main() -> int:
     }
     expected_start = {"hooks": [expected_handler, {
         "type": "command",
-        "command": "stacktrace remote policy hooks session-start",
+        "command": 'sh "${CLAUDE_PLUGIN_ROOT}/scripts/policy_hook.sh" session-start 2>/dev/null || true',
         "timeout": 5,
         "onFailure": "continue",
     }]}
