@@ -43,7 +43,8 @@ reports.
 - Admission hooks require the CLI release containing `remote policy hooks`
   and Claude Code 2.1.302 or newer. Upgrade the CLI before this plugin.
   Missing/older CLI commands continue without a policy decision. On a compatible
-  CLI the adapter is inert until `remote policy hooks enable` succeeds.
+  CLI the daemon serves policy automatically after Fleet enrollment.
+  Plugin setup requires neither enrollment nor a running daemon.
 
 ---
 

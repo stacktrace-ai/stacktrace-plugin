@@ -88,13 +88,19 @@ Review automation: [managed PR review and fixes](.github/managed-autofix.md).
 Require **Claude Code 2.1.302 or newer** and the CLI release containing `stacktrace remote policy hooks`.
 Upgrade the CLI before this plugin.
 A missing or older CLI command continues without a policy decision.
-A compatible CLI keeps admission off until activation succeeds.
+The daemon serves policy automatically after Fleet enrollment.
 
-Enroll the CLI and start its user daemon.
-Run:
+Install the plugin with:
 
 ```sh
-stacktrace remote policy hooks enable
+stacktrace remote policy hooks setup
+```
+
+Plugin setup requires neither enrollment nor a running daemon.
+Enroll the CLI and start its user daemon when credentials are available.
+Check readiness with:
+
+```sh
 stacktrace remote policy hooks status
 ```
 
@@ -127,10 +133,10 @@ distinguished from ordinary shell directory changes; start a new session in the
 target project. Status reports declarations and observed calls, not proof of
 complete mediation or current adapter health.
 
-For old root-owned managed policies, enable and verify hooks first, then run
+For old root-owned managed policies, install the plugin and verify hooks first, then run
 `stacktrace remote policy hooks migration` for explicit one-time administrator
 cleanup instructions. Ordinary installation and ongoing admission need no sudo.
-The shared evidence API must be published and pinned before activation; this
+The shared evidence API must be published and pinned before general policy rollout; this
 source change does not publish a release or alter an existing enrollment.
 
 
@@ -146,6 +152,7 @@ Failed or missing CLI commands produce no policy verdict.
 The hook command also guards a missing wrapper script.
 Successful JSON policy denials still block the action.
 Claude applies its normal permissions when Stacktrace produces no verdict.
+
 ## Session registration
 
 The plugin owns all Stacktrace hook declarations on laptops and remote workers.
@@ -160,7 +167,7 @@ Installed files and configuration survive migration; processes can disappear.
 
 The adapter command stays stable across independent CLI and plugin releases.
 An older CLI can reject this command without blocking the session.
-Run `stacktrace remote policy hooks setup` to install a compatible plugin and activate policy hooks.
+Run `stacktrace remote policy hooks setup` to install or update the user plugin.
 Setup checks native plugin installation and enablement before it removes an older installer-owned hook.
 Plugin validation and native conformance tests check hook declarations and failure behavior.
 
