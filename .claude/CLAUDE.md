@@ -9,6 +9,9 @@ that teaches the notification contract and shows a one-time welcome, and the
 status and findings skills. Parsing, detection, policy, persistence, routing
 and daemon lifecycle stay in the CLI; this repository owns packaging and
 Claude-specific integration only.
+SessionStart also delegates project registration to the stable CLI adapter.
+On both hosts, that adapter ensures daemon readiness before registration.
+The CLI owns recovery locks and reuses healthy daemons (ADR-0009).
 
 ## Common commands
 
