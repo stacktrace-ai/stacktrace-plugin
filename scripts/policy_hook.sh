@@ -1,7 +1,7 @@
 #!/bin/sh
 # CLI usage errors exit 2, which Claude treats as an explicit block.
 # Forward native verdicts only after a successful adapter run.
-if ! command -v stacktrace >/dev/null 2>&1 && [ -x "${HOME:-}/.local/bin/stacktrace" ]; then
+if [ -x "${HOME:-}/.local/bin/stacktrace" ] && { [ -z "${VIRTUAL_ENV:-}" ] || [ "$(command -v stacktrace 2>/dev/null || true)" != "$VIRTUAL_ENV/bin/stacktrace" ]; }; then
   PATH="$HOME/.local/bin:$PATH"
   export PATH
 fi

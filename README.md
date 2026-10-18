@@ -176,7 +176,8 @@ Plugin validation and native conformance tests check hook declarations and failu
 One SessionStart script quietly invokes the CLI adapter before it emits notification guidance.
 A missing or incompatible CLI cannot corrupt that guidance or block Claude.
 The script implements no daemon lifecycle or policy logic.
-The subscription and hook scripts also find a per-user CLI outside the inherited PATH.
+The subscription and hook scripts prefer the default per-user CLI over an older system copy.
+An active development virtualenv keeps its CLI selection.
 A local native-host test does not verify hosted worker migration.
 Verify a hosted start and resume before remote rollout.
 

@@ -38,7 +38,8 @@ The plugin contains no lifecycle implementation.
 The shell entrypoint discards CLI output and errors before it emits notification guidance.
 It has a fifteen-second timeout and continues on failure.
 It gives the detached worker five seconds before it reports an unavailable daemon.
-The subscription and hook scripts find a per-user CLI when the inherited PATH omits it.
+The subscription and hook scripts prefer the default per-user CLI over an older system copy.
+An active development virtualenv keeps its CLI selection.
 An older CLI can reject the command without blocking the session.
 CLI and plugin versions do not need to match.
 
