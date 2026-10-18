@@ -45,7 +45,8 @@ CLI and plugin versions do not need to match.
 
 The installer checks native plugin installation and enablement before it removes an older installer-owned registration.
 Plugin validation and native conformance tests check hook declarations and failure behavior.
-The installer uses Claude's user-scoped plugin commands.
+The shared installer directly runs Claude's user-scoped marketplace and plugin commands.
+The CLI exposes no plugin installation command.
 Plugin setup requires neither enrollment nor a running daemon.
 The daemon serves hook policy automatically after enrollment.
 It does not add hook declarations to user settings.

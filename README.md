@@ -93,7 +93,13 @@ The daemon serves policy automatically after Fleet enrollment.
 Install the plugin with:
 
 ```sh
-stacktrace remote policy hooks setup
+(
+  set -e
+  installer="$(mktemp)"
+  trap 'rm -f "$installer"' EXIT
+  curl -fsSL https://stacktrace.ai/install.sh -o "$installer"
+  sh "$installer"
+)
 ```
 
 Plugin setup requires neither enrollment nor a running daemon.
@@ -169,8 +175,10 @@ Installed files and configuration survive migration; processes can disappear.
 
 The adapter command stays stable across independent CLI and plugin releases.
 An older CLI can reject this command without blocking the session.
-Run `stacktrace remote policy hooks setup` to install or update the user plugin.
-Setup checks native plugin installation and enablement before it removes an older installer-owned hook.
+Run the shared installer to install or update the user plugin.
+The installer directly runs native Claude marketplace and plugin commands.
+It checks installation and enablement before it removes an older installer-owned hook.
+The CLI exposes no plugin installation command.
 Plugin validation and native conformance tests check hook declarations and failure behavior.
 
 One SessionStart script quietly invokes the CLI adapter before it emits notification guidance.
