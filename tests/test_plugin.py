@@ -92,6 +92,7 @@ def isolated(home: str, stubs: Stubs, *, cli: bool = True, daemon: bool = True, 
         "STACKTRACE_ADAPTER_TIMEOUT",
     ):
         environment.pop(name, None)
+    environment["STACKTRACE_ADAPTER_TIMEOUT"] = "0"
     environment.update(extra)
     return environment
 
@@ -339,7 +340,7 @@ class PluginContractTests(unittest.TestCase):
         )
         self.assertEqual(len(monitors), 1)
         self.assertEqual(
-            monitors[0]["command"], "stacktrace daemon subscribe --agent-kind claude-code"
+            monitors[0]["command"], 'sh "${CLAUDE_PLUGIN_ROOT}/scripts/subscribe.sh"'
         )
 
 
@@ -366,11 +367,11 @@ class DiagnosisTests(unittest.TestCase):
     def calls(self) -> list[str]:
         return self.log.read_text().splitlines() if self.log.exists() else []
 
-    def test_a_healthy_session_says_nothing_and_starts_no_python(self) -> None:
+    def test_a_healthy_session_says_nothing_and_only_delegates_to_the_adapter(self) -> None:
         """The CLI check is `command -v` and the daemon check a socket test,
         so a working machine never pays for a Python start."""
         self.assertEqual(self.shown(), [])
-        self.assertEqual(self.calls(), [])
+        self.assertEqual(self.calls(), ["remote policy hooks session-start"])
 
     def test_a_missing_cli_routes_to_status(self) -> None:
         self.assertEqual(
@@ -389,7 +390,7 @@ class DiagnosisTests(unittest.TestCase):
                 "lifecycle guidance."
             ],
         )
-        self.assertEqual(self.calls(), ["--version"])
+        self.assertEqual(self.calls(), ["remote policy hooks session-start", "--version"])
 
     def test_a_remote_session_says_nothing_if_the_socket_appears_in_time(self) -> None:
         """The session-start adapter hook races this one on remote workers
@@ -686,18 +687,62 @@ class PolicyHookContractTests(unittest.TestCase):
             self.assertLessEqual(handler["timeout"], 5)
             self.assertEqual(handler["command"], 'sh "${CLAUDE_PLUGIN_ROOT}/scripts/policy_hook.sh" admit 2>/dev/null || true')
 
-    def test_session_start_registration_also_goes_through_the_wrapper(self):
-        """An unwrapped adapter call would leak a SessionStart hook-error
-        notice (raw CLI stderr) on an incompatible CLI; the wrapper keeps
-        that failure as quiet as the admission hooks' own."""
-        document = json.loads((ROOT / "hooks" / "hooks.json").read_text())
-        handler = document["hooks"]["SessionStart"][0]["hooks"][1]
-        self.assertEqual(handler["onFailure"], "continue")
-        self.assertLessEqual(handler["timeout"], 5)
-        self.assertEqual(
-            handler["command"],
-            'sh "${CLAUDE_PLUGIN_ROOT}/scripts/policy_hook.sh" session-start 2>/dev/null || true',
-        )
+    def test_session_start_has_one_guarded_entrypoint(self):
+        document = json.loads((ROOT / "hooks/hooks.json").read_text())
+        handlers = document["hooks"]["SessionStart"][0]["hooks"]
+        self.assertEqual(len(handlers), 1)
+        self.assertEqual(handlers[0]["onFailure"], "continue")
+        self.assertEqual(handlers[0]["command"], 'sh "${CLAUDE_PLUGIN_ROOT}/scripts/session_start.sh" 2>/dev/null || true')
+
+    def test_session_adapter_receives_native_input_and_cannot_corrupt_guidance(self):
+        for code in (0, 1, 2, 127):
+            with self.subTest(code=code), tempfile.TemporaryDirectory() as home:
+                stubs = Stubs()
+                try:
+                    native = '{"hook_event_name":"SessionStart","cwd":"/project"}'
+                    capture = Path(home) / "input"
+                    (stubs.cli / "stacktrace").write_text(
+                        '#!/bin/sh\ncase "$*" in\n'
+                        '"remote policy hooks session-start") '
+                        f'IFS= read -r line; printf "%s" "$line" > "{capture}"; '
+                        f'printf broken-output; echo secret-error >&2; exit {code} ;;\n'
+                        'telemetry) echo off ;;\nesac\n'
+                    )
+                    result = subprocess.run(
+                        ["sh", str(ROOT / "scripts/session_start.sh")],
+                        input=native + "\n", text=True, capture_output=True,
+                        env=isolated(home, stubs), check=False,
+                    )
+                    self.assertEqual(result.returncode, 0)
+                    self.assertEqual(result.stderr, "")
+                    self.assertEqual(capture.read_text(), native)
+                    self.assertIn("hookSpecificOutput", json.loads(result.stdout))
+                    self.assertNotIn("broken-output", result.stdout)
+                finally:
+                    stubs.cleanup()
+
+    def test_all_plugin_entrypoints_find_the_per_user_cli_outside_path(self):
+        with tempfile.TemporaryDirectory() as home:
+            stubs = Stubs()
+            try:
+                local = Path(home) / ".local/bin"
+                local.mkdir(parents=True)
+                shutil.copy2(stubs.cli / "stacktrace", local / "stacktrace")
+                log = Path(home) / "calls"
+                environment = isolated(home, stubs, cli=False, STUB_LOG=str(log), STUB_TELEMETRY="off")
+                for script, arguments in (("session_start.sh", []), ("policy_hook.sh", ["admit"]), ("subscribe.sh", [])):
+                    result = subprocess.run(
+                        ["sh", str(ROOT / "scripts" / script), *arguments],
+                        input='{"hook_event_name":"SessionStart"}', text=True,
+                        capture_output=True, env=environment, check=False,
+                    )
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                calls = log.read_text().splitlines()
+                self.assertIn("remote policy hooks session-start", calls)
+                self.assertIn("remote policy hooks admit", calls)
+                self.assertIn("daemon subscribe --agent-kind claude-code", calls)
+            finally:
+                stubs.cleanup()
 
     def test_native_matching_covers_mcp_skill_and_plugin_agent_paths(self):
         document = json.loads((ROOT / "hooks" / "hooks.json").read_text())
@@ -741,7 +786,7 @@ class PolicyAdapterExitTests(unittest.TestCase):
             self.assertEqual((result.returncode, result.stdout, result.stderr), (0, "", ""))
     def test_missing_plugin_script_cannot_leak_a_shell_exit_two(self):
         manifest = json.loads((ROOT / "hooks/hooks.json").read_text())
-        for event, index in (("PreToolUse", 0), ("UserPromptExpansion", 0), ("SessionStart", 1)):
+        for event, index in (("PreToolUse", 0), ("UserPromptExpansion", 0), ("SessionStart", 0)):
             command = manifest["hooks"][event][0]["hooks"][index]["command"]
             with self.subTest(event=event), tempfile.TemporaryDirectory() as directory:
                 result = subprocess.run(

@@ -1,7 +1,7 @@
 [
   {
     "name": "stacktrace-alerts",
-    "command": "stacktrace daemon subscribe --agent-kind claude-code",
+    "command": "sh \"${CLAUDE_PLUGIN_ROOT}/scripts/subscribe.sh\"",
     "description": "High-severity Stacktrace findings for this Claude session"
   }
 ]

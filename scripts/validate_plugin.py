@@ -57,7 +57,7 @@ def main() -> int:
     if monitors != [
         {
             "name": "stacktrace-alerts",
-            "command": "stacktrace daemon subscribe --agent-kind claude-code",
+            "command": 'sh "${CLAUDE_PLUGIN_ROOT}/scripts/subscribe.sh"',
             "description": "High-severity Stacktrace findings for this Claude session",
         }
     ]:
@@ -66,14 +66,10 @@ def main() -> int:
     configured = hooks.get("hooks") if isinstance(hooks, dict) else None
     if not isinstance(configured, dict) or set(configured) != {"SessionStart", "PreToolUse", "UserPromptExpansion"}:
         fail("hooks must contain SessionStart guidance and both synchronous admission events")
-    expected_handler = {
+    expected_start = {"hooks": [{
         "type": "command",
-        "command": 'sh "${CLAUDE_PLUGIN_ROOT}/scripts/session_start.sh"',
-    }
-    expected_start = {"hooks": [expected_handler, {
-        "type": "command",
-        "command": 'sh "${CLAUDE_PLUGIN_ROOT}/scripts/policy_hook.sh" session-start 2>/dev/null || true',
-        "timeout": 5,
+        "command": 'sh "${CLAUDE_PLUGIN_ROOT}/scripts/session_start.sh" 2>/dev/null || true',
+        "timeout": 15,
         "onFailure": "continue",
     }]}
     if configured["SessionStart"] != [expected_start]:
