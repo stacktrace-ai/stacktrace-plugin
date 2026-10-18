@@ -85,7 +85,7 @@ Review automation: [managed PR review and fixes](.github/managed-autofix.md).
 
 ## Hook policy admission
 
-Require **Claude Code 2.1.302 or newer** and the CLI release containing `stacktrace remote policy hooks`.
+Require **Claude Code 2.1.274 or newer** and the CLI release containing `stacktrace remote policy hooks`.
 Upgrade the CLI before this plugin.
 A missing or older CLI command continues without a policy decision.
 The daemon serves policy automatically after Fleet enrollment.

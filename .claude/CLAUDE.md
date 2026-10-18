@@ -41,7 +41,7 @@ reports.
   admit`, which strips prompts, arguments, responses and transcripts before
   contacting the daemon. It never evaluates policy or scans in this repo.
 - Admission hooks require the CLI release containing `remote policy hooks`
-  and Claude Code 2.1.302 or newer. Upgrade the CLI before this plugin.
+  and Claude Code 2.1.274 or newer. Upgrade the CLI before this plugin.
   Missing/older CLI commands continue without a policy decision. On a compatible
   CLI the daemon serves policy automatically after Fleet enrollment.
   Plugin setup requires neither enrollment nor a running daemon.
