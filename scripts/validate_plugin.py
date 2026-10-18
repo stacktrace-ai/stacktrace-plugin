@@ -72,12 +72,12 @@ def main() -> int:
     }
     expected_start = {"hooks": [expected_handler, {
         "type": "command",
-        "command": "stacktrace remote policy hooks session-start --adapter-version 1",
+        "command": "stacktrace remote policy hooks session-start",
         "timeout": 5,
         "onFailure": "continue",
     }]}
     if configured["SessionStart"] != [expected_start]:
-        fail("SessionStart must teach notifications and delegate registration to adapter version 1")
+        fail("SessionStart must teach notifications and delegate registration to the CLI")
 
     for event in ("PreToolUse", "UserPromptExpansion"):
         expected_group = {

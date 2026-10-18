@@ -10,7 +10,7 @@
           },
           {
             "type": "command",
-            "command": "stacktrace remote policy hooks session-start --adapter-version 1",
+            "command": "stacktrace remote policy hooks session-start",
             "timeout": 5,
             "onFailure": "continue"
           }
