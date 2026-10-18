@@ -18,7 +18,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/scripts/policy_hook.sh\" admit 2>/dev/null || true",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/scripts/policy_hook.sh\" 2>/dev/null || true",
             "timeout": 5,
             "onFailure": "continue"
           }
@@ -31,7 +31,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/scripts/policy_hook.sh\" admit 2>/dev/null || true",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/scripts/policy_hook.sh\" 2>/dev/null || true",
             "timeout": 5,
             "onFailure": "continue"
           }

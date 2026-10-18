@@ -371,9 +371,9 @@ class DiagnosisTests(unittest.TestCase):
 
     def test_a_healthy_session_says_nothing_and_only_delegates_to_the_adapter(self) -> None:
         """The CLI check is `command -v` and the daemon check a socket test,
-        so a working machine never pays for a Python start."""
+        so a working machine adds no diagnostic CLI call."""
         self.assertEqual(self.shown(), [])
-        self.assertEqual(self.calls(), ["remote policy hooks session-start"])
+        self.assertEqual(self.calls(), [f"remote policy hooks run {ROOT}/scripts/claude_adapter.py"])
 
     def test_a_missing_cli_routes_to_status(self) -> None:
         self.assertEqual(
@@ -392,7 +392,7 @@ class DiagnosisTests(unittest.TestCase):
                 "lifecycle guidance."
             ],
         )
-        self.assertEqual(self.calls(), ["remote policy hooks session-start", "--version"])
+        self.assertEqual(self.calls(), [f"remote policy hooks run {ROOT}/scripts/claude_adapter.py", "--version"])
 
     def test_a_remote_session_says_nothing_if_the_socket_appears_in_time(self) -> None:
         """The session-start adapter hook races this one on remote workers
@@ -702,7 +702,7 @@ class PolicyHookContractTests(unittest.TestCase):
             self.assertNotIn("async", handler)
             self.assertEqual(handler["onFailure"], "continue")
             self.assertLessEqual(handler["timeout"], 5)
-            self.assertEqual(handler["command"], 'sh "${CLAUDE_PLUGIN_ROOT}/scripts/policy_hook.sh" admit 2>/dev/null || true')
+            self.assertEqual(handler["command"], 'sh "${CLAUDE_PLUGIN_ROOT}/scripts/policy_hook.sh" 2>/dev/null || true')
 
     def test_session_start_has_one_guarded_entrypoint(self):
         document = json.loads((ROOT / "hooks/hooks.json").read_text())
@@ -720,7 +720,7 @@ class PolicyHookContractTests(unittest.TestCase):
                     capture = Path(home) / "input"
                     (stubs.cli / "stacktrace").write_text(
                         '#!/bin/sh\ncase "$*" in\n'
-                        '"remote policy hooks session-start") '
+                        f'"remote policy hooks run {ROOT}/scripts/claude_adapter.py") '
                         f'IFS= read -r line; printf "%s" "$line" > "{capture}"; '
                         f'printf broken-output; echo secret-error >&2; exit {code} ;;\n'
                         'telemetry) echo off ;;\nesac\n'
@@ -739,7 +739,7 @@ class PolicyHookContractTests(unittest.TestCase):
                     stubs.cleanup()
 
     def test_a_wedged_adapter_cannot_stall_the_notification_contract(self):
-        """A hung `remote policy hooks session-start` call must not consume
+        """A hung generic adapter call must not consume
         the hook's own 15s timeout: that would discard this script's entire
         output, including the notification contract, to a real session."""
         with tempfile.TemporaryDirectory() as home:
@@ -747,7 +747,7 @@ class PolicyHookContractTests(unittest.TestCase):
             try:
                 (stubs.cli / "stacktrace").write_text(
                     '#!/bin/sh\ncase "$*" in\n'
-                    '"remote policy hooks session-start") sleep 30 ;;\n'
+                    f'"remote policy hooks run {ROOT}/scripts/claude_adapter.py") sleep 30 ;;\n'
                     "telemetry) echo off ;;\nesac\n"
                 )
                 start = time.monotonic()
@@ -781,8 +781,7 @@ class PolicyHookContractTests(unittest.TestCase):
                     )
                     self.assertEqual(result.returncode, 0, result.stderr)
                 calls = log.read_text().splitlines()
-                self.assertIn("remote policy hooks session-start", calls)
-                self.assertIn("remote policy hooks admit", calls)
+                self.assertEqual(calls.count(f"remote policy hooks run {ROOT}/scripts/claude_adapter.py"), 2)
                 self.assertIn("daemon subscribe --agent-kind claude-code", calls)
             finally:
                 stubs.cleanup()
