@@ -149,7 +149,7 @@ Claude applies its normal permissions when Stacktrace produces no verdict.
 ## Session registration
 
 The plugin owns all Stacktrace hook declarations on laptops and remote workers.
-SessionStart calls `stacktrace remote policy hooks session-start --adapter-version 1`.
+SessionStart calls `stacktrace remote policy hooks session-start`.
 The CLI registers the launch project with the daemon.
 The daemon collects evidence and updates decisions asynchronously.
 
@@ -161,7 +161,8 @@ Installed files and configuration survive migration; processes can disappear.
 The adapter command stays stable across independent CLI and plugin releases.
 An older CLI can reject this command without blocking the session.
 Run `stacktrace remote policy hooks setup` to install a compatible plugin and activate policy hooks.
-Setup checks the actual adapter command before it removes an older installer-owned hook.
+Setup checks native plugin installation and enablement before it removes an older installer-owned hook.
+Plugin validation and native conformance tests check hook declarations and failure behavior.
 
 The existing notification guidance script remains diagnostic.
 It does not own project registration or remote daemon startup.

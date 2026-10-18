@@ -24,7 +24,7 @@ Laptop sessions share a daemon whose lifecycle belongs to the installer or host.
 Add a SessionStart handler that calls the stable CLI adapter:
 
 ```text
-stacktrace remote policy hooks session-start --adapter-version 1
+stacktrace remote policy hooks session-start
 ```
 
 The adapter registers the project on laptops.
@@ -38,12 +38,13 @@ The new handler has a five-second timeout and continues on failure.
 An older CLI can reject the command without blocking the session.
 CLI and plugin versions do not need to match.
 
-The installer checks this handler before it removes an older installer-owned registration.
+The installer checks native plugin installation and enablement before it removes an older installer-owned registration.
+Plugin validation and native conformance tests check hook declarations and failure behavior.
 The installer uses Claude's user-scoped plugin commands.
 It does not add hook declarations to user settings.
 
 The cross-repository contract lives in
-[Stacktrace ADR-0139](https://github.com/stacktrace-ai/stacktrace/pull/253).
+[Stacktrace ADR-0143](https://github.com/stacktrace-ai/stacktrace/pull/253).
 
 ## Consequences
 
