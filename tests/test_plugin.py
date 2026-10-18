@@ -91,6 +91,7 @@ def isolated(home: str, stubs: Stubs, *, cli: bool = True, daemon: bool = True, 
         "STUB_VERSION",
         "STUB_TELEMETRY",
         "STACKTRACE_ADAPTER_TIMEOUT",
+        "STACKTRACE_ADAPTER_CALL_TIMEOUT",
     ):
         environment.pop(name, None)
     environment["STACKTRACE_ADAPTER_TIMEOUT"] = "0"
@@ -721,6 +722,32 @@ class PolicyHookContractTests(unittest.TestCase):
                     self.assertNotIn("broken-output", result.stdout)
                 finally:
                     stubs.cleanup()
+
+    def test_a_wedged_adapter_cannot_stall_the_notification_contract(self):
+        """A hung `remote policy hooks session-start` call must not consume
+        the hook's own 15s timeout: that would discard this script's entire
+        output, including the notification contract, to a real session."""
+        with tempfile.TemporaryDirectory() as home:
+            stubs = Stubs()
+            try:
+                (stubs.cli / "stacktrace").write_text(
+                    '#!/bin/sh\ncase "$*" in\n'
+                    '"remote policy hooks session-start") sleep 30 ;;\n'
+                    "telemetry) echo off ;;\nesac\n"
+                )
+                start = time.monotonic()
+                result = subprocess.run(
+                    ["sh", str(ROOT / "scripts/session_start.sh")],
+                    input="{}", text=True, capture_output=True,
+                    env=isolated(home, stubs, STACKTRACE_ADAPTER_CALL_TIMEOUT="1"),
+                    check=False,
+                )
+                elapsed = time.monotonic() - start
+            finally:
+                stubs.cleanup()
+            self.assertLess(elapsed, 5)
+            self.assertEqual(result.returncode, 0)
+            self.assertIn("hookSpecificOutput", json.loads(result.stdout))
 
     def test_all_plugin_entrypoints_find_the_per_user_cli_outside_path(self):
         with tempfile.TemporaryDirectory() as home:
