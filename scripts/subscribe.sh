@@ -1,6 +1,6 @@
 #!/bin/sh
 # Claude can start before uv's shell PATH update takes effect.
-if ! command -v stacktrace >/dev/null 2>&1 && [ -x "$HOME/.local/bin/stacktrace" ]; then
+if [ -x "$HOME/.local/bin/stacktrace" ] && { [ -z "${VIRTUAL_ENV:-}" ] || [ "$(command -v stacktrace 2>/dev/null || true)" != "$VIRTUAL_ENV/bin/stacktrace" ]; }; then
   PATH="$HOME/.local/bin:$PATH"
   export PATH
 fi

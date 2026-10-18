@@ -83,6 +83,7 @@ def isolated(home: str, stubs: Stubs, *, cli: bool = True, daemon: bool = True, 
         "CLAUDE_CONFIG_DIR",
         "CLAUDE_PLUGIN_DATA",
         "CLAUDE_CODE_REMOTE",
+        "VIRTUAL_ENV",
         "NO_COLOR",
         "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC",
         "DISABLE_TELEMETRY",
@@ -743,6 +744,31 @@ class PolicyHookContractTests(unittest.TestCase):
                 self.assertIn("daemon subscribe --agent-kind claude-code", calls)
             finally:
                 stubs.cleanup()
+
+    def test_default_user_install_wins_over_a_stale_path_copy_unless_a_venv_is_active(self):
+        for virtualenv in ("", "active", "unrelated"):
+            with self.subTest(virtualenv=virtualenv), tempfile.TemporaryDirectory() as home:
+                stubs = Stubs()
+                try:
+                    local = Path(home) / ".local/bin"
+                    local.mkdir(parents=True)
+                    cli = local / "stacktrace"
+                    cli.write_text('#!/bin/sh\nprintf user-cli\n')
+                    cli.chmod(0o755)
+                    environment = isolated(home, stubs, VIRTUAL_ENV=virtualenv)
+                    if virtualenv == "active":
+                        venv = Path(home) / "venv"
+                        venv.mkdir()
+                        (venv / "bin").symlink_to(stubs.cli, target_is_directory=True)
+                        environment.update(VIRTUAL_ENV=str(venv), PATH=str(venv / "bin") + os.pathsep + str(stubs.tools))
+                    result = subprocess.run(
+                        ["sh", str(ROOT / "scripts/policy_hook.sh"), "admit"],
+                        input='{}', text=True, capture_output=True, env=environment, check=False,
+                    )
+                    self.assertEqual(result.returncode, 0)
+                    self.assertEqual(result.stdout, "" if virtualenv == "active" else "user-cli\n")
+                finally:
+                    stubs.cleanup()
 
     def test_native_matching_covers_mcp_skill_and_plugin_agent_paths(self):
         document = json.loads((ROOT / "hooks" / "hooks.json").read_text())
