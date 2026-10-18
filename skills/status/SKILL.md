@@ -35,7 +35,14 @@ after a check below establishes its condition.
 Check in this order. Stop at the first failure, report it with its fix, and
 say which checks did not run.
 
-1. **CLI on PATH.** `command -v stacktrace`, then `stacktrace --version`.
+1. **CLI on PATH.** Resolve the CLI first. Prefer `~/.local/bin/stacktrace`
+   over an older `PATH` copy. Keep an active virtual environment's own copy.
+   Run:
+   ```sh
+   if [ -x "$HOME/.local/bin/stacktrace" ] && { [ -z "${VIRTUAL_ENV:-}" ] || [ "$(command -v stacktrace 2>/dev/null || true)" != "$VIRTUAL_ENV/bin/stacktrace" ]; }; then echo "$HOME/.local/bin/stacktrace"; else command -v stacktrace; fi
+   ```
+   Use that result in place of `stacktrace` in every command below, including
+   `--version`.
    - Absent: apply **Install or find the CLI**, then stop. Daemon state is not
      known yet.
    - Older than 0.5.2: apply **Upgrade the resolved CLI**, then stop. 0.5.2 is
