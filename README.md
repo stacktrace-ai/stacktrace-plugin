@@ -7,7 +7,8 @@ the first supported host.
 Each host integration is a thin adapter over the Stacktrace CLI and daemon. The
 Claude adapter declares one session-lifetime monitor, adds notification guidance
 at session start, and provides status and findings workflows.
-Parsing, detection, policy, persistence, and routing remain in Stacktrace.
+The plugin parses native hook events and renders native denials.
+Detection, policy evaluation, persistence, routing, and shared daemon recovery remain in Stacktrace.
 
 Future Codex and Cursor adapters belong in this repository. Host-specific
 packaging and lifecycle integration stay separate; they share the Stacktrace
@@ -162,18 +163,31 @@ Claude applies its normal permissions when Stacktrace produces no verdict.
 ## Session registration
 
 The plugin owns all Stacktrace hook declarations on laptops and remote workers.
-SessionStart calls `stacktrace remote policy hooks session-start`.
+SessionStart and admission invoke the same runner:
+
+```sh
+stacktrace remote policy hooks run "${CLAUDE_PLUGIN_ROOT}/scripts/claude_adapter.py"
+```
+
+The runner uses the CLI's Python runtime.
+The plugin needs no separate Python installation.
+The plugin owns native event parsing, selector extraction, launch context, and denial rendering.
+The CLI validates bounded requests and owns socket transport and shared daemon recovery.
+The daemon owns identity resolution, evidence collection, policy evaluation, and decision snapshots.
 The CLI registers the launch project with the daemon.
 The daemon collects evidence and updates decisions asynchronously.
 
-The adapter ensures the daemon runs on both hosts, including after worker migration.
+The CLI ensures the daemon runs on both hosts, including after worker migration.
 Concurrent sessions share the CLI bootstrap and daemon locks.
 Healthy daemons remain running.
 Only remote recovery checks for CLI updates.
 Remote installation runs from the environment startup script.
 Installed files and configuration survive migration; processes can disappear.
 
-The adapter command stays stable across independent CLI and plugin releases.
+Runner contract version 1 stays stable across independent CLI and plugin releases.
+The old native `admit` and `session-start` commands retire.
+Upgrade both packages before checking enforcement readiness.
+An older plugin or CLI can continue without enforcement during this transition.
 An older CLI can reject this command without blocking the session.
 Run the shared installer to install or update the user plugin.
 The installer directly runs native Claude marketplace and plugin commands.
@@ -181,7 +195,7 @@ It checks installation and enablement before it removes an older installer-owned
 The CLI exposes no plugin installation command.
 Plugin validation and native conformance tests check hook declarations and failure behavior.
 
-One SessionStart script quietly invokes the CLI adapter before it emits notification guidance.
+One SessionStart script quietly invokes the generic runner before it emits notification guidance.
 A missing or incompatible CLI cannot corrupt that guidance or block Claude.
 The script implements no daemon lifecycle or policy logic.
 The subscription and hook scripts prefer the default per-user CLI over an older system copy.
