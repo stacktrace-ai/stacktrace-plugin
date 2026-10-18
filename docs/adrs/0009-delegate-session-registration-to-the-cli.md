@@ -1,6 +1,6 @@
 ---
 id: 0009
-title: Delegate session registration and remote bootstrap to the CLI
+title: Delegate session registration and shared recovery to the CLI
 status: proposed
 date: 2026-10-18
 supersedes: null
@@ -17,24 +17,28 @@ Users need one named owner for these hooks.
 
 Remote worker migration preserves installed files and configuration but removes processes.
 The resume hook must restore the daemon before project registration.
-Laptop sessions share a daemon whose lifecycle belongs to the installer or host.
+Laptop sessions also need recovery after a reboot or process loss.
+The existing CLI locks let concurrent sessions restore one shared daemon.
 
 ## Decision
 
-Add a SessionStart handler that calls the stable CLI adapter:
+Use one SessionStart shell entrypoint that calls the stable CLI adapter:
 
 ```text
 stacktrace remote policy hooks session-start
 ```
 
-The adapter registers the project on laptops.
-On remote workers, it first ensures daemon readiness.
+The adapter ensures daemon readiness before project registration on both hosts.
+It launches detached work and reuses a healthy daemon.
+Only remote recovery checks for CLI updates.
 The CLI owns lifecycle locks, enrollment, socket requests, and background work.
 The daemon owns evidence collection and policy evaluation.
 
 The plugin contains no lifecycle implementation.
-Its existing guidance script remains diagnostic.
-The new handler has a five-second timeout and continues on failure.
+The shell entrypoint discards CLI output and errors before it emits notification guidance.
+It has a fifteen-second timeout and continues on failure.
+It gives the detached worker five seconds before it reports an unavailable daemon.
+The subscription and hook scripts find a per-user CLI when the inherited PATH omits it.
 An older CLI can reject the command without blocking the session.
 CLI and plugin versions do not need to match.
 
@@ -51,7 +55,8 @@ The cross-repository contract lives in
 ## Consequences
 
 The plugin owns all Stacktrace hooks on both hosts.
-The laptop lifecycle stays outside sessions.
-Remote start and resume can recover lost daemon processes.
+Laptop and remote start or resume can recover lost daemon processes.
+The plugin contains no daemon launcher or restart loop.
+The CLI retains lifecycle ownership.
 The notification guidance script can still run without a compatible CLI.
 Hosted cloud start and worker-resume tests remain rollout gates.

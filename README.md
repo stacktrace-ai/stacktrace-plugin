@@ -49,8 +49,8 @@ stacktrace daemon subscribe --agent-kind claude-code
 ```
 
 The command subscribes with Claude's native session ID to the already-running
-per-user daemon. On laptops, the host or installer starts the daemon.
-On remote workers, the SessionStart adapter asks the CLI to ensure daemon readiness.
+per-user daemon. The installer starts a detached daemon on both hosts.
+SessionStart asks the CLI to restore a missing daemon before project registration.
 The daemon reads Claude's native session log, runs detection,
 and sends only notification-worthy events back to that exact session. Raw
 transcript content is not copied into notification events.
@@ -160,8 +160,10 @@ SessionStart calls `stacktrace remote policy hooks session-start`.
 The CLI registers the launch project with the daemon.
 The daemon collects evidence and updates decisions asynchronously.
 
-The laptop adapter never starts or updates the daemon.
-The remote adapter first ensures the daemon runs, including after worker migration.
+The adapter ensures the daemon runs on both hosts, including after worker migration.
+Concurrent sessions share the CLI bootstrap and daemon locks.
+Healthy daemons remain running.
+Only remote recovery checks for CLI updates.
 Remote installation runs from the environment startup script.
 Installed files and configuration survive migration; processes can disappear.
 
@@ -171,8 +173,10 @@ Run `stacktrace remote policy hooks setup` to install or update the user plugin.
 Setup checks native plugin installation and enablement before it removes an older installer-owned hook.
 Plugin validation and native conformance tests check hook declarations and failure behavior.
 
-The existing notification guidance script remains diagnostic.
-It does not own project registration or remote daemon startup.
+One SessionStart script quietly invokes the CLI adapter before it emits notification guidance.
+A missing or incompatible CLI cannot corrupt that guidance or block Claude.
+The script implements no daemon lifecycle or policy logic.
+The subscription and hook scripts also find a per-user CLI outside the inherited PATH.
 A local native-host test does not verify hosted worker migration.
 Verify a hosted start and resume before remote rollout.
 

@@ -6,12 +6,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/scripts/session_start.sh\""
-          },
-          {
-            "type": "command",
-            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/scripts/policy_hook.sh\" session-start 2>/dev/null || true",
-            "timeout": 5,
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/scripts/session_start.sh\" 2>/dev/null || true",
+            "timeout": 15,
             "onFailure": "continue"
           }
         ]
