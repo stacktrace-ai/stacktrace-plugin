@@ -573,6 +573,21 @@ class LifecycleWorkflowTests(unittest.TestCase):
             self.assertIn(rule, rules)
             self.assertIn(rule, checks)
 
+    def test_user_workflows_resolve_the_same_cli_as_the_hooks(self) -> None:
+        """Status and findings run as separate Bash tool calls, which do not
+        share an exported PATH, so each must resolve the per-user CLI the
+        same way session_start.sh does rather than trust a bare `stacktrace`
+        that a stale system copy ahead on PATH would resolve differently."""
+        condition = (
+            'if [ -x "$HOME/.local/bin/stacktrace" ] && { [ -z "${VIRTUAL_ENV:-}" ] '
+            '|| [ "$(command -v stacktrace 2>/dev/null || true)" != "$VIRTUAL_ENV/bin/stacktrace" ]; }; then'
+        )
+        session_start = (ROOT / "scripts" / "session_start.sh").read_text(encoding="utf-8")
+        self.assertIn(condition, session_start)
+        for skill in ("status", "findings"):
+            document = (ROOT / "skills" / skill / "SKILL.md").read_text(encoding="utf-8")
+            self.assertIn(condition, document)
+
     def test_plugin_docs_require_the_released_lifecycle(self) -> None:
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         instructions = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
