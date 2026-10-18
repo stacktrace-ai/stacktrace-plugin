@@ -686,6 +686,19 @@ class PolicyHookContractTests(unittest.TestCase):
             self.assertLessEqual(handler["timeout"], 5)
             self.assertEqual(handler["command"], 'sh "${CLAUDE_PLUGIN_ROOT}/scripts/policy_hook.sh" admit 2>/dev/null || true')
 
+    def test_session_start_registration_also_goes_through_the_wrapper(self):
+        """An unwrapped adapter call would leak a SessionStart hook-error
+        notice (raw CLI stderr) on an incompatible CLI; the wrapper keeps
+        that failure as quiet as the admission hooks' own."""
+        document = json.loads((ROOT / "hooks" / "hooks.json").read_text())
+        handler = document["hooks"]["SessionStart"][0]["hooks"][1]
+        self.assertEqual(handler["onFailure"], "continue")
+        self.assertLessEqual(handler["timeout"], 5)
+        self.assertEqual(
+            handler["command"],
+            'sh "${CLAUDE_PLUGIN_ROOT}/scripts/policy_hook.sh" session-start 2>/dev/null || true',
+        )
+
     def test_native_matching_covers_mcp_skill_and_plugin_agent_paths(self):
         document = json.loads((ROOT / "hooks" / "hooks.json").read_text())
         matcher = re.compile(document["hooks"]["PreToolUse"][0]["matcher"])
@@ -728,7 +741,7 @@ class PolicyAdapterExitTests(unittest.TestCase):
             self.assertEqual((result.returncode, result.stdout, result.stderr), (0, "", ""))
     def test_missing_plugin_script_cannot_leak_a_shell_exit_two(self):
         manifest = json.loads((ROOT / "hooks/hooks.json").read_text())
-        for event, index in (("PreToolUse", 0), ("UserPromptExpansion", 0)):
+        for event, index in (("PreToolUse", 0), ("UserPromptExpansion", 0), ("SessionStart", 1)):
             command = manifest["hooks"][event][0]["hooks"][index]["command"]
             with self.subTest(event=event), tempfile.TemporaryDirectory() as directory:
                 result = subprocess.run(
