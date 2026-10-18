@@ -49,8 +49,9 @@ stacktrace daemon subscribe --agent-kind claude-code
 ```
 
 The command subscribes with Claude's native session ID to the already-running
-per-user daemon; the host or user starts the daemon, never the plugin (ADR-0008
-in `docs/adrs/`). The daemon reads Claude's native session log, runs detection,
+per-user daemon. On laptops, the host or installer starts the daemon.
+On remote workers, the SessionStart adapter asks the CLI to ensure daemon readiness.
+The daemon reads Claude's native session log, runs detection,
 and sends only notification-worthy events back to that exact session. Raw
 transcript content is not copied into notification events.
 
@@ -145,3 +146,26 @@ Failed or missing CLI commands produce no policy verdict.
 The hook command also guards a missing wrapper script.
 Successful JSON policy denials still block the action.
 Claude applies its normal permissions when Stacktrace produces no verdict.
+## Session registration
+
+The plugin owns all Stacktrace hook declarations on laptops and remote workers.
+SessionStart calls `stacktrace remote policy hooks session-start --adapter-version 1`.
+The CLI registers the launch project with the daemon.
+The daemon collects evidence and updates decisions asynchronously.
+
+The laptop adapter never starts or updates the daemon.
+The remote adapter first ensures the daemon runs, including after worker migration.
+Remote installation runs from the environment startup script.
+Installed files and configuration survive migration; processes can disappear.
+
+The adapter command stays stable across independent CLI and plugin releases.
+An older CLI can reject this command without blocking the session.
+Run `stacktrace remote policy hooks setup` to install a compatible plugin and activate policy hooks.
+Setup checks the actual adapter command before it removes an older installer-owned hook.
+
+The existing notification guidance script remains diagnostic.
+It does not own project registration or remote daemon startup.
+A local native-host test does not verify hosted worker migration.
+Verify a hosted start and resume before remote rollout.
+
+See [ADR-0009](docs/adrs/0009-delegate-session-registration-to-the-cli.md).

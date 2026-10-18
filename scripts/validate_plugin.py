@@ -70,12 +70,14 @@ def main() -> int:
         "type": "command",
         "command": 'sh "${CLAUDE_PLUGIN_ROOT}/scripts/session_start.sh"',
     }
-    try:
-        handler = configured["SessionStart"][0]["hooks"][0]
-    except (IndexError, KeyError, TypeError):
-        fail("SessionStart must contain one command handler")
-    if handler != expected_handler:
-        fail("SessionStart must invoke only the notification guidance script")
+    expected_start = {"hooks": [expected_handler, {
+        "type": "command",
+        "command": "stacktrace remote policy hooks session-start --adapter-version 1",
+        "timeout": 5,
+        "onFailure": "continue",
+    }]}
+    if configured["SessionStart"] != [expected_start]:
+        fail("SessionStart must teach notifications and delegate registration to adapter version 1")
 
     for event in ("PreToolUse", "UserPromptExpansion"):
         expected_group = {

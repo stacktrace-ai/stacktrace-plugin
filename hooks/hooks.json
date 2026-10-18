@@ -7,6 +7,12 @@
           {
             "type": "command",
             "command": "sh \"${CLAUDE_PLUGIN_ROOT}/scripts/session_start.sh\""
+          },
+          {
+            "type": "command",
+            "command": "stacktrace remote policy hooks session-start --adapter-version 1",
+            "timeout": 5,
+            "onFailure": "continue"
           }
         ]
       }
