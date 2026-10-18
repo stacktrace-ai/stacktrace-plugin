@@ -104,7 +104,11 @@ diagnose() {
     version=$(stacktrace --version 2>/dev/null || true)
     if below_floor "$version"; then
       echo "The plugin needs stacktrace $FLOOR or newer; \`stacktrace\` on PATH is ${version:-unreadable}. Run /stacktrace:status for upgrade guidance."
-    else
+    elif [ -z "$remote" ]; then
+      # On a remote worker the session-start adapter hook runs in parallel
+      # with this one and may still be restoring the daemon (ADR-0009), so
+      # this socket check cannot tell a real outage from one about to be
+      # recovered.
       echo "The Stacktrace daemon is not reachable. Run /stacktrace:status for lifecycle guidance."
     fi
   fi

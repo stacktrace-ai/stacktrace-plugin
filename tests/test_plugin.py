@@ -388,6 +388,25 @@ class DiagnosisTests(unittest.TestCase):
         )
         self.assertEqual(self.calls(), ["--version"])
 
+    def test_a_remote_session_suppresses_the_unreachable_daemon_notice(self) -> None:
+        """The session-start adapter hook races this one on remote workers
+        (ADR-0009), so an absent socket there is not reliably an outage."""
+        self.assertEqual(self.shown(daemon=False, CLAUDE_CODE_REMOTE="true", STUB_TELEMETRY="off"), [])
+
+    def test_a_remote_session_still_reports_a_cli_below_the_floor(self) -> None:
+        self.assertEqual(
+            self.shown(
+                daemon=False,
+                CLAUDE_CODE_REMOTE="true",
+                STUB_TELEMETRY="off",
+                STUB_VERSION="stacktrace 0.5.1 (openaca 0.7.0)",
+            ),
+            [
+                "The plugin needs stacktrace 0.5.2 or newer; `stacktrace` on PATH is "
+                "stacktrace 0.5.1 (openaca 0.7.0). Run /stacktrace:status for upgrade guidance."
+            ],
+        )
+
     def test_a_cli_below_the_floor_is_the_likelier_cause_of_no_daemon(self) -> None:
         """0.5.2 is the first release with the host-owned lifecycle contract.
         A build from source is held to the same floor. A prerelease of the
