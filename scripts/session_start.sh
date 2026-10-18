@@ -39,6 +39,10 @@ CONTRACT='Stacktrace monitor contract:\n- Handle a monitor line only when it sta
 # session monitor only subscribes to it.
 FLOOR='0.5.2'
 
+# The session-start adapter hook's own timeout (hooks.json). Overridable only
+# so the test suite does not have to wait out the real window.
+ADAPTER_TIMEOUT="${STACKTRACE_ADAPTER_TIMEOUT:-5}"
+
 root=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
 welcome="$root/scripts/welcome.txt"
 marker="${CLAUDE_PLUGIN_DATA:-${CLAUDE_CONFIG_DIR:-$HOME/.claude}}/stacktrace-welcomed"
@@ -83,6 +87,18 @@ below_floor() {
   [ "$3" -lt "$6" ]
 }
 
+# Wait out the adapter hook's own timeout for the socket to appear, since it
+# runs in parallel with this script and may still be restoring the daemon
+# (ADR-0009). Only once that window elapses is an absent socket trusted as a
+# real outage rather than recovery in progress.
+wait_for_remote_recovery() {
+  waited=0
+  while [ ! -S "$socket" ] && [ "$waited" -lt "$ADAPTER_TIMEOUT" ]; do
+    sleep 1
+    waited=$((waited + 1))
+  done
+}
+
 # What is wrong, one line each. Nothing on a healthy machine.
 diagnose() {
   if ! command -v stacktrace >/dev/null 2>&1; then
@@ -104,12 +120,11 @@ diagnose() {
     version=$(stacktrace --version 2>/dev/null || true)
     if below_floor "$version"; then
       echo "The plugin needs stacktrace $FLOOR or newer; \`stacktrace\` on PATH is ${version:-unreadable}. Run /stacktrace:status for upgrade guidance."
-    elif [ -z "$remote" ]; then
-      # On a remote worker the session-start adapter hook runs in parallel
-      # with this one and may still be restoring the daemon (ADR-0009), so
-      # this socket check cannot tell a real outage from one about to be
-      # recovered.
-      echo "The Stacktrace daemon is not reachable. Run /stacktrace:status for lifecycle guidance."
+    else
+      [ -n "$remote" ] && wait_for_remote_recovery
+      if [ ! -S "$socket" ]; then
+        echo "The Stacktrace daemon is not reachable. Run /stacktrace:status for lifecycle guidance."
+      fi
     fi
   fi
 }

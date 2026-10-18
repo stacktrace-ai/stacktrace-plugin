@@ -8,6 +8,8 @@ import socket
 import subprocess
 import tempfile
 import sys
+import threading
+import time
 import unittest
 from pathlib import Path
 
@@ -29,7 +31,7 @@ exit 0
 """
 
 #: Every external command the hook runs.
-TOOLS = ("sh", "awk", "mkdir", "dirname", "sed", "tr", "id")
+TOOLS = ("sh", "awk", "mkdir", "dirname", "sed", "tr", "id", "sleep")
 
 
 class Stubs:
@@ -87,6 +89,7 @@ def isolated(home: str, stubs: Stubs, *, cli: bool = True, daemon: bool = True, 
         "STUB_LOG",
         "STUB_VERSION",
         "STUB_TELEMETRY",
+        "STACKTRACE_ADAPTER_TIMEOUT",
     ):
         environment.pop(name, None)
     environment.update(extra)
@@ -388,10 +391,48 @@ class DiagnosisTests(unittest.TestCase):
         )
         self.assertEqual(self.calls(), ["--version"])
 
-    def test_a_remote_session_suppresses_the_unreachable_daemon_notice(self) -> None:
+    def test_a_remote_session_says_nothing_if_the_socket_appears_in_time(self) -> None:
         """The session-start adapter hook races this one on remote workers
-        (ADR-0009), so an absent socket there is not reliably an outage."""
-        self.assertEqual(self.shown(daemon=False, CLAUDE_CODE_REMOTE="true", STUB_TELEMETRY="off"), [])
+        (ADR-0009). A socket that appears while this script is still waiting
+        is a race won, not an outage."""
+        socket_path = self.stubs.no_socket
+
+        def create_socket() -> None:
+            time.sleep(0.3)
+            listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            listener.bind(str(socket_path))
+            listener.close()
+
+        thread = threading.Thread(target=create_socket)
+        thread.start()
+        try:
+            self.assertEqual(
+                self.shown(
+                    daemon=False,
+                    CLAUDE_CODE_REMOTE="true",
+                    STUB_TELEMETRY="off",
+                    STACKTRACE_ADAPTER_TIMEOUT="2",
+                ),
+                [],
+            )
+        finally:
+            thread.join()
+
+    def test_a_remote_session_reports_the_daemon_once_recovery_times_out(self) -> None:
+        """If the socket never appears, waiting out the adapter's own
+        timeout still ends in the same notice a laptop gets immediately."""
+        self.assertEqual(
+            self.shown(
+                daemon=False,
+                CLAUDE_CODE_REMOTE="true",
+                STUB_TELEMETRY="off",
+                STACKTRACE_ADAPTER_TIMEOUT="1",
+            ),
+            [
+                "The Stacktrace daemon is not reachable. Run /stacktrace:status for "
+                "lifecycle guidance."
+            ],
+        )
 
     def test_a_remote_session_still_reports_a_cli_below_the_floor(self) -> None:
         self.assertEqual(
