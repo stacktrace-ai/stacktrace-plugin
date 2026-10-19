@@ -53,18 +53,29 @@ def main() -> int:
         else None
     )
     sha = source.get("sha") if isinstance(source, dict) else None
+    expected_entry = {
+        "name": "stacktrace",
+        "displayName": manifest.get("displayName"),
+        "description": manifest.get("description"),
+        "author": manifest.get("author"),
+        "homepage": manifest.get("homepage"),
+        "repository": manifest.get("repository"),
+        "keywords": manifest.get("keywords"),
+        "source": {
+            "source": "url",
+            "url": "https://github.com/stacktrace-ai/stacktrace-plugin.git",
+            "sha": sha,
+        },
+    }
     if (
         not isinstance(marketplace, dict)
         or marketplace.get("name") != "stacktrace"
         or not isinstance(sha, str)
         or re.fullmatch(r"[0-9a-f]{40}", sha) is None
-        or plugins != [{"name": "stacktrace", "source": {
-            "source": "github",
-            "repo": "stacktrace-ai/stacktrace-plugin",
-            "sha": sha,
-        }}]
+        or plugins != [expected_entry]
     ):
-        fail("marketplace must pin the official stacktrace plugin to an exact commit")
+        fail("marketplace must pin the official stacktrace plugin to an exact commit "
+             "and mirror its display fields from plugin.json")
 
     if monitors != [
         {

@@ -16,18 +16,24 @@ class MarketplaceReleaseTests(unittest.TestCase):
         (entry,) = json.loads((ROOT / ".claude-plugin/marketplace.json").read_text())["plugins"]
         source = entry["source"]
         self.assertIsInstance(source, dict, "relative sources follow development merges")
-        self.assertEqual(source["source"], "github")
-        self.assertEqual(source["repo"], "stacktrace-ai/stacktrace-plugin")
+        self.assertEqual(source["source"], "url")
+        self.assertEqual(source["url"], "https://github.com/stacktrace-ai/stacktrace-plugin.git")
         self.assertRegex(source["sha"], r"^[0-9a-f]{40}$")
         self.assertNotIn("ref", source)
 
+    def test_entry_mirrors_plugin_manifest_display_fields(self):
+        manifest = json.loads((ROOT / ".claude-plugin/plugin.json").read_text())
+        (entry,) = json.loads((ROOT / ".claude-plugin/marketplace.json").read_text())["plugins"]
+        for field in ("displayName", "description", "author", "homepage", "repository", "keywords"):
+            self.assertEqual(entry[field], manifest[field], f"entry {field} must mirror plugin.json")
+
     def test_validator_rejects_mutable_sources_and_invalid_commit_pins(self):
-        github = {"source": "github", "repo": "stacktrace-ai/stacktrace-plugin"}
+        url_source = {"source": "url", "url": "https://github.com/stacktrace-ai/stacktrace-plugin.git"}
         sources = [
-            "./", github, {**github, "ref": "main"}, {**github, "ref": "v0.3.2"},
-            {**github, "sha": "1234567"}, {**github, "sha": "A" * 40},
-            {**github, "sha": ""}, {**github, "sha": None},
-            {**github, "sha": "a" * 40, "repo": "another/repository"},
+            "./", url_source, {**url_source, "ref": "main"}, {**url_source, "ref": "v0.3.2"},
+            {**url_source, "sha": "1234567"}, {**url_source, "sha": "A" * 40},
+            {**url_source, "sha": ""}, {**url_source, "sha": None},
+            {**url_source, "sha": "a" * 40, "url": "https://github.com/another/repository.git"},
         ]
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

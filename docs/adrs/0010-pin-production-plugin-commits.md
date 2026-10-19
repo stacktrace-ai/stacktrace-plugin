@@ -17,10 +17,22 @@ A manifest version supports caching but does not select released source files.
 ## Decision
 
 Keep the existing marketplace name and repository URL.
-Replace the relative plugin source with a GitHub source for this repository.
+Replace the relative plugin source with an explicit HTTPS `url` source for this
+repository, not a `github` source. Claude Code fetches an entry's `github`
+source without the SSH-to-HTTPS fallback that `/plugin marketplace add` and
+`claude plugin install` apply; an in-session `/plugin install` or an
+auto-update of a `github`-sourced entry fails outright for a user with no
+GitHub SSH key. An explicit `https://` `url` source clones the public
+repository over HTTPS directly, so it carries no such fallback gap.
 Pin that source with a full commit SHA.
 Read the installed plugin version from that commit's `plugin.json`.
 Keep one version authority instead of duplicating it in the marketplace entry.
+
+Repeat `plugin.json`'s display fields (`displayName`, `description`, `author`,
+`homepage`, `repository`, `keywords`) on the marketplace entry. Claude Code can
+read `plugin.json` before install only for a relative-path source; a pinned
+`url` source would otherwise show users just the plugin's name until they
+install it.
 
 Ordinary development merges leave the marketplace pin unchanged.
 Test development checkouts with `--plugin-dir`.
@@ -55,6 +67,12 @@ Moving that reference can change installed source without changing the catalog p
 **Create another marketplace repository.**
 The existing catalog can select an external commit from this same repository.
 A second repository adds migration and maintenance without improving this boundary.
+
+**Pin with a `github` source instead of an explicit `url` source.**
+A `github` source still requires `git`, and its entry-level fetch skips the
+SSH-to-HTTPS fallback that marketplace add and shell installs apply, so an
+in-session install or auto-update fails outright for a user with no GitHub SSH
+key. The explicit HTTPS `url` source names the same commit without that gap.
 
 ## Verification
 
