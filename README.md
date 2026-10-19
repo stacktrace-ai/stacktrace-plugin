@@ -76,10 +76,12 @@ claude plugin validate --strict .
 ```
 
 The working manifest carries a semver version.
-The production marketplace selects an exact plugin commit with its GitHub source and `sha` field.
+The production marketplace selects an exact plugin commit with an explicit HTTPS `url` source and `sha` field.
 The initial pin selects `0.3.2` at `bb0095731ad8471ed25c28c143dc07f80737c244`.
 Ordinary code merges and development version changes leave that pin unchanged.
 Existing marketplace names and installation commands remain the same.
+The marketplace entry also repeats `plugin.json`'s display fields, because Claude Code can read
+`plugin.json` itself only for a relative-path source, before install.
 
 Test unreleased code directly:
 
@@ -95,10 +97,11 @@ claude --plugin-dir /absolute/path/to/stacktrace-plugin
 4. Open a promotion PR that changes only the marketplace source `sha` and necessary release documentation.
 5. Merge that PR to make the release available to marketplace installations and updates.
 
-Keep `source.source` as `github` and `source.repo` as `stacktrace-ai/stacktrace-plugin`.
+Keep `source.source` as `url` and `source.url` as `https://github.com/stacktrace-ai/stacktrace-plugin.git`.
 Use the full 40-character commit SHA.
 Keep the version in the pinned commit's `plugin.json`.
 Do not add another version to the marketplace entry.
+Keep the entry's display fields equal to the pinned commit's `plugin.json` values.
 
 A runtime release needs a new version because Claude can retain cached files when the version stays unchanged.
 Keep existing release tags and versions immutable.
