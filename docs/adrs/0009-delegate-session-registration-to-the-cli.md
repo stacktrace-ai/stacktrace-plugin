@@ -25,10 +25,10 @@ The existing CLI locks let concurrent sessions restore one shared daemon.
 Use one SessionStart shell entrypoint that calls the stable CLI adapter:
 
 ```text
-stacktrace remote policy hooks session-start
+stacktrace remote policy hooks register
 ```
 
-The adapter ensures daemon readiness before project registration on both hosts.
+The command registers the project after it ensures daemon readiness on both hosts.
 It launches detached work and reuses a healthy daemon.
 Only remote recovery checks for CLI updates.
 The CLI owns lifecycle locks, enrollment, socket requests, and background work.

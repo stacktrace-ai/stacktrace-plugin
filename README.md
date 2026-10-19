@@ -162,7 +162,7 @@ Claude applies its normal permissions when Stacktrace produces no verdict.
 ## Session registration
 
 The plugin owns all Stacktrace hook declarations on laptops and remote workers.
-SessionStart calls `stacktrace remote policy hooks session-start`.
+SessionStart calls `stacktrace remote policy hooks register`.
 The CLI registers the launch project with the daemon.
 The daemon collects evidence and updates decisions asynchronously.
 

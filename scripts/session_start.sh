@@ -52,7 +52,7 @@ fi
 # /dev/null as part of forking it, before applying an explicit `<&0`, so that
 # redirect would otherwise duplicate /dev/null instead of the native input.
 exec 3<&0
-stacktrace remote policy hooks session-start 0<&3 >/dev/null 2>&1 &
+stacktrace remote policy hooks register 0<&3 >/dev/null 2>&1 &
 adapter_pid=$!
 ( sleep "$ADAPTER_CALL_TIMEOUT"; kill "$adapter_pid" 2>/dev/null ) >/dev/null 2>&1 &
 watchdog_pid=$!
