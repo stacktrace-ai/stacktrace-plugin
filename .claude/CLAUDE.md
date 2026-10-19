@@ -37,6 +37,7 @@ reports.
 - The production marketplace pins the official plugin repository by an exact commit SHA (ADR-0010).
   Keep the pin unchanged during ordinary development.
   Advance it only for an explicitly requested release promotion.
+  The `release-stacktrace-plugin` skill drives a release and its promotion.
   Test a development checkout with `--plugin-dir`.
   Keep the runtime version in `plugin.json`, without a duplicate marketplace-entry version.
 - The plugin needs `stacktrace-cli` 0.5.2 or newer, the first release where the

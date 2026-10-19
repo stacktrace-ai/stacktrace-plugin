@@ -91,6 +91,8 @@ claude --plugin-dir /absolute/path/to/stacktrace-plugin
 
 ### Promote a plugin release
 
+The `release-stacktrace-plugin` skill in `.claude/skills/` runs these steps.
+
 1. Select a candidate commit from `main` with a new runtime release version in `plugin.json`.
 2. Run the repository tests, strict Claude validation, and native installation checks against the supported published CLI.
 3. Tag the tested commit with its plugin version.
