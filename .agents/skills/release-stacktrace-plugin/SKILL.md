@@ -153,6 +153,7 @@ bump the version on `main` ahead of a release. If `plugin.json` on `main`
 already carries `<version>`, skip the bump and add only the notes.
 
 ```bash
+set -e
 git checkout -b release/<version>
 python3 - "<version>" <<'EOF'
 import json, sys
@@ -202,11 +203,15 @@ git show "$candidate:.claude-plugin/plugin.json" | python3 -c 'import json,sys; 
 git merge-base --is-ancestor "$candidate" origin/main                                                                  # the candidate must be on main
 ```
 
+Keep this SHA as `<candidate>` for the rest of the procedure. A fresh lookup
+could later resolve to a different, unvalidated commit if `main` moves while
+you wait for the live-session check below.
+
 Run the three repository gates on a checkout of the candidate:
 
 ```bash
-candidate=$(git log --first-parent -n 1 --format=%H origin/main -- docs/releases/v<version>.md)
-git checkout --detach "$candidate"
+set -e
+git checkout --detach "<candidate>"
 python3 scripts/validate_plugin.py
 python3 -m unittest discover -s tests -v
 claude plugin validate --strict .
@@ -219,8 +224,11 @@ the current pin, moves a scratch catalog to the candidate, and updates. The
 same path is what an existing user takes. The candidate must already be on
 GitHub, because the `url` source clones it from there.
 
+This probe needs Claude Code 2.1.277 or newer. An older version can install
+the candidate but keep the previous commit in `installed_plugins.json`. The
+check below then fails on a working candidate.
+
 ```bash
-candidate=$(git log --first-parent -n 1 --format=%H origin/main -- docs/releases/v<version>.md)
 probe=$(mktemp -d)
 set_pin() {
   python3 - "$1/.claude-plugin/marketplace.json" "$2" <<'EOF'
@@ -240,10 +248,10 @@ export CLAUDE_CONFIG_DIR="$probe/config"
 claude plugin marketplace add "$probe/catalog"
 claude plugin install stacktrace@stacktrace
 installed                                          # must print "$pinned_version $pin"
-set_pin "$probe/catalog" "$candidate"
+set_pin "$probe/catalog" "<candidate>"
 claude plugin marketplace update stacktrace
 claude plugin update stacktrace@stacktrace
-installed                                          # must print "<version> $candidate"
+installed                                          # must print "<version> <candidate>"
 unset CLAUDE_CONFIG_DIR
 git worktree remove --force "$probe/catalog"
 rm -rf "$probe"
@@ -281,9 +289,11 @@ outside this procedure could have installed it.
 
 Tag only after the user confirms that the candidate passed Step 5.
 
+Tag the `<candidate>` SHA from Step 5, not a fresh lookup. A fresh lookup
+could name an untested commit if `main` moved since Step 5.
+
 ```bash
-candidate=$(git log --first-parent -n 1 --format=%H origin/main -- docs/releases/v<version>.md)
-git tag v<version> "$candidate"
+git tag v<version> "<candidate>"
 git push origin v<version>
 ```
 
@@ -323,6 +333,7 @@ from the candidate's `plugin.json` and become visible in the marketplace.
 Run the gates, then commit and push:
 
 ```bash
+set -e
 python3 scripts/validate_plugin.py
 python3 -m unittest discover -s tests -v
 claude plugin validate --strict .
