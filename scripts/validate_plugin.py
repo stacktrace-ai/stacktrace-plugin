@@ -47,35 +47,46 @@ def main() -> int:
         fail("plugin manifest must reference only the monitor declaration")
 
     plugins = marketplace.get("plugins") if isinstance(marketplace, dict) else None
-    source = (
-        plugins[0].get("source")
+    entry = (
+        plugins[0]
         if isinstance(plugins, list) and len(plugins) == 1 and isinstance(plugins[0], dict)
-        else None
+        else {}
     )
+    source = entry.get("source")
     sha = source.get("sha") if isinstance(source, dict) else None
-    expected_entry = {
-        "name": "stacktrace",
-        "displayName": manifest.get("displayName"),
-        "description": manifest.get("description"),
-        "author": manifest.get("author"),
-        "homepage": manifest.get("homepage"),
-        "repository": manifest.get("repository"),
-        "keywords": manifest.get("keywords"),
-        "source": {
-            "source": "url",
-            "url": "https://github.com/stacktrace-ai/stacktrace-plugin.git",
-            "sha": sha,
-        },
+    # The entry's display fields are validated for shape only, not pinned to a
+    # commit's plugin.json: the marketplace sha stays fixed across ordinary
+    # development commits, so comparing against the working tree would force
+    # publishing unreleased metadata or fail CI on an unrelated edit.
+    author = entry.get("author")
+    display_fields_valid = (
+        isinstance(entry.get("displayName"), str) and entry.get("displayName")
+        and isinstance(entry.get("description"), str) and entry.get("description")
+        and isinstance(author, dict) and isinstance(author.get("name"), str) and author.get("name")
+        and isinstance(entry.get("homepage"), str) and entry.get("homepage")
+        and isinstance(entry.get("repository"), str) and entry.get("repository")
+        and isinstance(entry.get("keywords"), list) and entry.get("keywords")
+        and all(isinstance(keyword, str) and keyword for keyword in entry.get("keywords"))
+    )
+    expected_keys = {
+        "name", "source", "displayName", "description", "author",
+        "homepage", "repository", "keywords",
     }
     if (
         not isinstance(marketplace, dict)
         or marketplace.get("name") != "stacktrace"
+        or entry.get("name") != "stacktrace"
+        or set(entry) != expected_keys
+        or not isinstance(source, dict)
+        or source.get("source") != "url"
+        or source.get("url") != "https://github.com/stacktrace-ai/stacktrace-plugin.git"
+        or "ref" in source
         or not isinstance(sha, str)
         or re.fullmatch(r"[0-9a-f]{40}", sha) is None
-        or plugins != [expected_entry]
+        or not display_fields_valid
     ):
         fail("marketplace must pin the official stacktrace plugin to an exact commit "
-             "and mirror its display fields from plugin.json")
+             "and carry well-formed display fields")
 
     if monitors != [
         {
