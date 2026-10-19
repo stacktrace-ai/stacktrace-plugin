@@ -308,17 +308,26 @@ the pinned commit's `plugin.json` after install. The validator checks only the
 shape of these fields (ADR-0010), so this step is the only place that keeps
 them equal. Base the PR on the current `main`.
 
+The script re-reads the pin from current `main`. It stops if the pin's
+version is not lower than the candidate's version. This guards against an
+overlapping release. An earlier release can reach this step after a later
+release already promoted. Without the check, it would move the pin backward.
+
 ```bash
 git checkout main
 git pull --ff-only
 git checkout -b release/promote-<version>
-candidate=$(git rev-parse "v<version>")
+candidate=$(git rev-parse "v<version>^{commit}")
 python3 - "$candidate" <<'EOF'
 import json, subprocess, sys
 path = ".claude-plugin/marketplace.json"
 catalog = json.load(open(path))
 (entry,) = catalog["plugins"]
+current_pin = entry["source"]["sha"]
+current_version = json.loads(subprocess.check_output(["git", "show", f"{current_pin}:.claude-plugin/plugin.json"]))["version"]
 pinned = json.loads(subprocess.check_output(["git", "show", f"{sys.argv[1]}:.claude-plugin/plugin.json"]))
+if tuple(map(int, current_version.split("."))) >= tuple(map(int, pinned["version"].split("."))):
+    sys.exit(f"Current pin {current_pin} is already at {current_version}; refusing to move it back to {pinned['version']}.")
 for field in ("displayName", "description", "author", "homepage", "repository", "keywords"):
     entry[field] = pinned[field]
 entry["source"]["sha"] = sys.argv[1]
@@ -347,7 +356,7 @@ Open the PR only when the user asks for it:
 ```bash
 pin=$(git show origin/main:.claude-plugin/marketplace.json | python3 -c 'import json,sys; print(json.load(sys.stdin)["plugins"][0]["source"]["sha"])')
 pinned_version=$(git show "$pin:.claude-plugin/plugin.json" | python3 -c 'import json,sys; print(json.load(sys.stdin)["version"])')
-candidate=$(git rev-parse "v<version>")
+candidate=$(git rev-parse "v<version>^{commit}")
 gh pr create --title "release: promote plugin <version>" --body "Promotes plugin <version> to the production marketplace.
 
 - Moves the pin from $pin ($pinned_version) to $candidate (v<version>).
