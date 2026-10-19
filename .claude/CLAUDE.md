@@ -34,6 +34,11 @@ reports.
   monitor in `monitors/monitors.json`. Paths go through `${CLAUDE_PLUGIN_ROOT}`.
 - `scripts/validate_plugin.py` states the intended plugin surface; update it
   when the surface changes.
+- The production marketplace pins the official plugin repository by an exact commit SHA (ADR-0010).
+  Keep the pin unchanged during ordinary development.
+  Advance it only for an explicitly requested release promotion.
+  Test a development checkout with `--plugin-dir`.
+  Keep the runtime version in `plugin.json`, without a duplicate marketplace-entry version.
 - The plugin needs `stacktrace-cli` 0.5.2 or newer, the first release where the
   host or user starts the daemon and the session monitor only subscribes.
 - Observation hooks remain non-blocking. The explicit policy adapter is

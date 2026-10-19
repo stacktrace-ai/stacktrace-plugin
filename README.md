@@ -75,10 +75,41 @@ python3 -m unittest discover -s tests -v
 claude plugin validate --strict .
 ```
 
-The manifest carries a semver `version`, currently `0.3.2`, and `claude plugin
-validate --strict .` passes. Claude Code treats that string as the plugin's
-identity: an installed copy updates only when the version changes, so **every
-release bumps it**. `scripts/validate_plugin.py` fails a manifest without one.
+The working manifest carries a semver version.
+The production marketplace selects an exact plugin commit with its GitHub source and `sha` field.
+The initial pin selects `0.3.2` at `bb0095731ad8471ed25c28c143dc07f80737c244`.
+Ordinary code merges and development version changes leave that pin unchanged.
+Existing marketplace names and installation commands remain the same.
+
+Test unreleased code directly:
+
+```sh
+claude --plugin-dir /absolute/path/to/stacktrace-plugin
+```
+
+### Promote a plugin release
+
+1. Select a candidate commit from `main` with a new runtime release version in `plugin.json`.
+2. Run the repository tests, strict Claude validation, and native installation checks against the supported published CLI.
+3. Tag the tested commit with its plugin version.
+4. Open a promotion PR that changes only the marketplace source `sha` and necessary release documentation.
+5. Merge that PR to make the release available to marketplace installations and updates.
+
+Keep `source.source` as `github` and `source.repo` as `stacktrace-ai/stacktrace-plugin`.
+Use the full 40-character commit SHA.
+Keep the version in the pinned commit's `plugin.json`.
+Do not add another version to the marketplace entry.
+
+A runtime release needs a new version because Claude can retain cached files when the version stays unchanged.
+Keep existing release tags and versions immutable.
+CLI and plugin versions do not need matching numbers.
+
+The initial pin freezes the currently served version without creating a tag or GitHub release.
+It prevents future merges from changing the selected plugin code.
+It does not remove code from existing plugin caches.
+The installer release boundary remains separate.
+
+See [ADR-0010](docs/adrs/0010-pin-production-plugin-commits.md).
 
 Review automation: [managed PR review and fixes](.github/managed-autofix.md).
 
