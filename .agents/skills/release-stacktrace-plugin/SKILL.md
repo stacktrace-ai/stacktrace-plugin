@@ -302,7 +302,7 @@ them equal. Base the PR on the current `main`.
 git checkout main
 git pull --ff-only
 git checkout -b release/promote-<version>
-candidate=$(git log --first-parent -n 1 --format=%H origin/main -- docs/releases/v<version>.md)
+candidate=$(git rev-parse "v<version>")
 python3 - "$candidate" <<'EOF'
 import json, subprocess, sys
 path = ".claude-plugin/marketplace.json"
@@ -336,7 +336,7 @@ Open the PR only when the user asks for it:
 ```bash
 pin=$(git show origin/main:.claude-plugin/marketplace.json | python3 -c 'import json,sys; print(json.load(sys.stdin)["plugins"][0]["source"]["sha"])')
 pinned_version=$(git show "$pin:.claude-plugin/plugin.json" | python3 -c 'import json,sys; print(json.load(sys.stdin)["version"])')
-candidate=$(git log --first-parent -n 1 --format=%H origin/main -- docs/releases/v<version>.md)
+candidate=$(git rev-parse "v<version>")
 gh pr create --title "release: promote plugin <version>" --body "Promotes plugin <version> to the production marketplace.
 
 - Moves the pin from $pin ($pinned_version) to $candidate (v<version>).
