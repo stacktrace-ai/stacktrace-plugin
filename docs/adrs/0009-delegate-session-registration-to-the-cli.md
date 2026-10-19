@@ -22,28 +22,18 @@ The existing CLI locks let concurrent sessions restore one shared daemon.
 
 ## Decision
 
-Use one SessionStart shell entrypoint that calls the generic CLI runner:
+Use one SessionStart shell entrypoint that calls the stable CLI adapter:
 
 ```text
-stacktrace remote policy hooks run "${CLAUDE_PLUGIN_ROOT}/scripts/claude_adapter.py"
+stacktrace remote policy hooks session-start
 ```
 
-The plugin adapter translates native events into bounded registration or admission requests.
-It owns selector extraction, fixed launch context, remote-host detection, and native denial rendering.
-The CLI validates normalized requests before socket calls or daemon recovery.
-The shared recovery worker ensures daemon readiness before registration on both hosts.
-The CLI launches detached work and reuses a healthy daemon.
+The adapter ensures daemon readiness before project registration on both hosts.
+It launches detached work and reuses a healthy daemon.
 Only remote recovery checks for CLI updates.
 The CLI owns lifecycle locks, enrollment, socket requests, and background work.
 The daemon owns evidence collection and policy evaluation.
 
-The adapter declares `API_VERSION = 1`, `request(payload, environment)`, and `deny(payload, decision)`.
-The CLI runs the trusted adapter with its own Python runtime in one process.
-The adapter imports only the standard library.
-No separate Python installation or SDK release is required.
-The CLI passes only confirmed daemon denials to the native renderer.
-Allow and defer emit no native permission grant.
-The runner discards adapter diagnostics and partial output on failures.
 The plugin contains no lifecycle implementation.
 The shell entrypoint discards CLI output and errors before it emits notification guidance.
 It has a fifteen-second timeout and continues on failure.
@@ -52,9 +42,6 @@ The subscription and hook scripts prefer the default per-user CLI over an older 
 An active development virtualenv keeps its CLI selection.
 An older CLI can reject the command without blocking the session.
 CLI and plugin versions do not need to match.
-Both packages must support runner contract version 1.
-The old native admission commands retire during this transition.
-Upgrade both packages before checking enforcement readiness.
 
 The installer checks native plugin installation and enablement before it removes an older installer-owned registration.
 Plugin validation and native conformance tests check hook declarations and failure behavior.
@@ -66,16 +53,6 @@ It does not add hook declarations to user settings.
 
 The cross-repository contract lives in
 [Stacktrace ADR-0143](https://github.com/stacktrace-ai/stacktrace/pull/253).
-
-## Alternatives considered
-
-Keep native parsing in the CLI.
-This requires CLI changes for each native event format and duplicates plugin integration ownership.
-Keep native parsing in the plugin and share transport and lifecycle through the runner instead.
-
-Invoke a separate Python interpreter from the plugin.
-This adds a runtime prerequisite and another process on each covered action.
-Use the CLI runtime for both translation and transport instead.
 
 ## Consequences
 

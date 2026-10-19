@@ -6,10 +6,11 @@ Host integrations for Stacktrace: thin adapters over the `stacktrace` CLI and
 its daemon. The Claude Code adapter declares one session-lifetime monitor
 (`stacktrace daemon subscribe --agent-kind claude-code`), a SessionStart hook
 that teaches the notification contract and shows a one-time welcome, and the
-status and findings skills. Native hook parsing, selector extraction, launch context, and denial rendering belong here.
-Detection, policy evaluation, persistence, routing, socket transport, and daemon recovery stay in the CLI.
-SessionStart delegates normalized project registration through the generic CLI runner.
-On both hosts, the CLI ensures daemon readiness before registration.
+status and findings skills. Parsing, detection, policy, persistence, routing
+and daemon lifecycle stay in the CLI; this repository owns packaging and
+Claude-specific integration only.
+SessionStart also delegates project registration to the stable CLI adapter.
+On both hosts, that adapter ensures daemon readiness before registration.
 The CLI owns recovery locks and reuses healthy daemons (ADR-0009).
 
 ## Common commands
@@ -36,11 +37,10 @@ reports.
 - The plugin needs `stacktrace-cli` 0.5.2 or newer, the first release where the
   host or user starts the daemon and the session monitor only subscribes.
 - Observation hooks remain non-blocking. The explicit policy adapter is
-  synchronous: `stacktrace remote policy hooks run` loads `scripts/claude_adapter.py`.
-  That plugin adapter strips native content before it returns bounded selectors.
-  The CLI validates normalized requests and contacts the daemon.
-  The plugin never evaluates policy or scans.
-- Admission hooks require the CLI release containing the generic runner
+  synchronous: it passes native stdin only to `stacktrace remote policy hooks
+  admit`, which strips prompts, arguments, responses and transcripts before
+  contacting the daemon. It never evaluates policy or scans in this repo.
+- Admission hooks require the CLI release containing `remote policy hooks`
   and Claude Code 2.1.274 or newer. Upgrade the CLI before this plugin.
   Missing/older CLI commands continue without a policy decision. On a compatible
   CLI the daemon serves policy automatically after Fleet enrollment.
