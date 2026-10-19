@@ -274,7 +274,10 @@ CLI and a running daemon:
 ```bash
 uv tool install "stacktrace-cli==<minimum>"
 stacktrace daemon start
-claude --plugin-dir "$(pwd)"                       # from a checkout of the candidate
+session=$(mktemp -d)
+git worktree add --detach "$session" "<candidate>"
+claude --plugin-dir "$session"
+git worktree remove --force "$session"
 ```
 
 In that session, the session-start message must not report a missing CLI or
