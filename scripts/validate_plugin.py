@@ -47,12 +47,24 @@ def main() -> int:
         fail("plugin manifest must reference only the monitor declaration")
 
     plugins = marketplace.get("plugins") if isinstance(marketplace, dict) else None
+    source = (
+        plugins[0].get("source")
+        if isinstance(plugins, list) and len(plugins) == 1 and isinstance(plugins[0], dict)
+        else None
+    )
+    sha = source.get("sha") if isinstance(source, dict) else None
     if (
         not isinstance(marketplace, dict)
         or marketplace.get("name") != "stacktrace"
-        or plugins != [{"name": "stacktrace", "source": "./"}]
+        or not isinstance(sha, str)
+        or re.fullmatch(r"[0-9a-f]{40}", sha) is None
+        or plugins != [{"name": "stacktrace", "source": {
+            "source": "github",
+            "repo": "stacktrace-ai/stacktrace-plugin",
+            "sha": sha,
+        }}]
     ):
-        fail("marketplace must list exactly the repository-local stacktrace plugin")
+        fail("marketplace must pin the official stacktrace plugin to an exact commit")
 
     if monitors != [
         {
