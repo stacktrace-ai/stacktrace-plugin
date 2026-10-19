@@ -34,6 +34,14 @@ read `plugin.json` before install only for a relative-path source; a pinned
 `url` source would otherwise show users just the plugin's name until they
 install it.
 
+Validate the entry's display fields for shape only: present, non-empty, and
+correctly typed. Do not compare them against `plugin.json`, neither the
+working tree's copy nor the pinned commit's. The working tree changes on
+ordinary commits that leave the pin unchanged, so that comparison would force
+either publishing unreleased metadata or a CI failure unrelated to the entry.
+The pinned commit's copy needs the repository's full git history, which the
+CI checkout does not fetch.
+
 Ordinary development merges leave the marketplace pin unchanged.
 Test development checkouts with `--plugin-dir`.
 Promote a tested commit through a separate marketplace update.

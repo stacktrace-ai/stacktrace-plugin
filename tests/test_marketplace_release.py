@@ -21,11 +21,31 @@ class MarketplaceReleaseTests(unittest.TestCase):
         self.assertRegex(source["sha"], r"^[0-9a-f]{40}$")
         self.assertNotIn("ref", source)
 
-    def test_entry_mirrors_plugin_manifest_display_fields(self):
-        manifest = json.loads((ROOT / ".claude-plugin/plugin.json").read_text())
+    def test_entry_display_fields_are_present_and_well_formed(self):
         (entry,) = json.loads((ROOT / ".claude-plugin/marketplace.json").read_text())["plugins"]
-        for field in ("displayName", "description", "author", "homepage", "repository", "keywords"):
-            self.assertEqual(entry[field], manifest[field], f"entry {field} must mirror plugin.json")
+        self.assertTrue(entry["displayName"])
+        self.assertTrue(entry["description"])
+        self.assertTrue(entry["author"]["name"])
+        self.assertTrue(entry["homepage"])
+        self.assertTrue(entry["repository"])
+        self.assertTrue(entry["keywords"])
+
+    def test_validator_ignores_an_unreleased_plugin_manifest_edit(self):
+        """An ordinary commit changing plugin.json must not force the pinned
+        marketplace entry out of sync or fail CI (the sha intentionally stays
+        fixed until a promotion PR advances it)."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            shutil.copytree(ROOT, root, dirs_exist_ok=True, ignore=shutil.ignore_patterns(".git", "__pycache__"))
+            manifest_path = root / ".claude-plugin/plugin.json"
+            manifest = json.loads(manifest_path.read_text())
+            manifest["description"] = "An unreleased description from ordinary development"
+            manifest_path.write_text(json.dumps(manifest))
+            result = subprocess.run(
+                [sys.executable, str(root / "scripts/validate_plugin.py")],
+                capture_output=True, text=True, check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_validator_rejects_mutable_sources_and_invalid_commit_pins(self):
         url_source = {"source": "url", "url": "https://github.com/stacktrace-ai/stacktrace-plugin.git"}
