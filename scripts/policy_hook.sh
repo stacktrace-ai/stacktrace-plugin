@@ -5,7 +5,7 @@ if [ -x "${HOME:-}/.local/bin/stacktrace" ] && { [ -z "${VIRTUAL_ENV:-}" ] || [ 
   PATH="$HOME/.local/bin:$PATH"
   export PATH
 fi
-output=$(stacktrace remote policy hooks run "${0%/*}/claude_adapter.py" 2>/dev/null) || exit 0
+output=$(stacktrace remote policy hooks "$@" 2>/dev/null) || exit 0
 if [ -n "$output" ]; then
   printf '%s\n' "$output"
 fi

@@ -79,7 +79,7 @@ def main() -> int:
         expected_group = {
             "hooks": [{
                 "type": "command",
-                "command": 'sh "${CLAUDE_PLUGIN_ROOT}/scripts/policy_hook.sh" 2>/dev/null || true',
+                "command": 'sh "${CLAUDE_PLUGIN_ROOT}/scripts/policy_hook.sh" admit 2>/dev/null || true',
                 "timeout": 5,
                 "onFailure": "continue",
             }],
@@ -91,9 +91,6 @@ def main() -> int:
 
     if not (ROOT / "scripts" / "policy_hook.sh").is_file():
         fail("scripts/policy_hook.sh must normalize failed CLI exits")
-
-    if not (ROOT / "scripts" / "claude_adapter.py").is_file():
-        fail("scripts/claude_adapter.py must own native translation")
 
     expected_skills = {"findings", "status"}
     skills_root = ROOT / "skills"
