@@ -207,6 +207,18 @@ Keep this SHA as `<candidate>` for the rest of the procedure. A fresh lookup
 could later resolve to a different, unvalidated commit if `main` moves while
 you wait for the live-session check below.
 
+Recompute the full range against the candidate. Compare it with the log from
+Step 2.
+
+```bash
+pin=$(python3 -c 'import json; print(json.load(open(".claude-plugin/marketplace.json"))["plugins"][0]["source"]["sha"])')
+git log --oneline "$pin..<candidate>"
+```
+
+If `main` gained commits after Step 2 that the notes do not describe, update
+the notes and the compatibility values. Show the user the new diff. Get
+their approval again before Step 6 tags the candidate.
+
 Run the three repository gates on a checkout of the candidate:
 
 ```bash
