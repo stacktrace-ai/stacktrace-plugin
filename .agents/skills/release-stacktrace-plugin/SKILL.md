@@ -72,6 +72,8 @@ echo "$pinned_version at $pin"
 Confirm that `<version>` is higher than `$pinned_version`:
 
 ```bash
+pin=$(python3 -c 'import json; print(json.load(open(".claude-plugin/marketplace.json"))["plugins"][0]["source"]["sha"])')
+pinned_version=$(git show "$pin:.claude-plugin/plugin.json" | python3 -c 'import json,sys; print(json.load(sys.stdin)["version"])')
 python3 -c 'import sys; a, b = (tuple(map(int, v.split("."))) for v in sys.argv[1:]); sys.exit(a <= b)' "<version>" "$pinned_version"
 ```
 
@@ -84,6 +86,7 @@ The pin, not a tag, marks the previous release. The first pinned version,
 `0.3.2`, has no tag.
 
 ```bash
+pin=$(python3 -c 'import json; print(json.load(open(".claude-plugin/marketplace.json"))["plugins"][0]["source"]["sha"])')
 git log --oneline "$pin..origin/main"
 ```
 
@@ -171,6 +174,8 @@ git push -u origin release/<version>
 Open the PR only when the user asks for it:
 
 ```bash
+pin=$(python3 -c 'import json; print(json.load(open(".claude-plugin/marketplace.json"))["plugins"][0]["source"]["sha"])')
+pinned_version=$(git show "$pin:.claude-plugin/plugin.json" | python3 -c 'import json,sys; print(json.load(sys.stdin)["version"])')
 gh pr create --title "release: <version>" --body "Release prep for plugin <version>.
 
 - Bumps \`.claude-plugin/plugin.json\` to <version>.
@@ -200,6 +205,7 @@ git merge-base --is-ancestor "$candidate" origin/main                           
 Run the three repository gates on a checkout of the candidate:
 
 ```bash
+candidate=$(git log --first-parent -n 1 --format=%H origin/main -- docs/releases/v<version>.md)
 git checkout --detach "$candidate"
 python3 scripts/validate_plugin.py
 python3 -m unittest discover -s tests -v
@@ -214,6 +220,7 @@ same path is what an existing user takes. The candidate must already be on
 GitHub, because the `url` source clones it from there.
 
 ```bash
+candidate=$(git log --first-parent -n 1 --format=%H origin/main -- docs/releases/v<version>.md)
 probe=$(mktemp -d)
 set_pin() {
   python3 - "$1/.claude-plugin/marketplace.json" "$2" <<'EOF'
@@ -275,6 +282,7 @@ outside this procedure could have installed it.
 Tag only after the user confirms that the candidate passed Step 5.
 
 ```bash
+candidate=$(git log --first-parent -n 1 --format=%H origin/main -- docs/releases/v<version>.md)
 git tag v<version> "$candidate"
 git push origin v<version>
 ```
@@ -294,6 +302,7 @@ them equal. Base the PR on the current `main`.
 git checkout main
 git pull --ff-only
 git checkout -b release/promote-<version>
+candidate=$(git log --first-parent -n 1 --format=%H origin/main -- docs/releases/v<version>.md)
 python3 - "$candidate" <<'EOF'
 import json, subprocess, sys
 path = ".claude-plugin/marketplace.json"
@@ -325,6 +334,9 @@ git push -u origin release/promote-<version>
 Open the PR only when the user asks for it:
 
 ```bash
+pin=$(git show origin/main:.claude-plugin/marketplace.json | python3 -c 'import json,sys; print(json.load(sys.stdin)["plugins"][0]["source"]["sha"])')
+pinned_version=$(git show "$pin:.claude-plugin/plugin.json" | python3 -c 'import json,sys; print(json.load(sys.stdin)["version"])')
+candidate=$(git log --first-parent -n 1 --format=%H origin/main -- docs/releases/v<version>.md)
 gh pr create --title "release: promote plugin <version>" --body "Promotes plugin <version> to the production marketplace.
 
 - Moves the pin from $pin ($pinned_version) to $candidate (v<version>).
