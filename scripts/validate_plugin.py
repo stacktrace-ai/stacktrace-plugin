@@ -33,6 +33,18 @@ def main() -> int:
     marketplace = load_json(".claude-plugin/marketplace.json")
     hooks = load_json("hooks/hooks.json")
     monitors = load_json("monitors/monitors.json")
+    codex = load_json(".codex-plugin/plugin.json")
+    if codex != {"name": "stacktrace", "description": "Hook-visible MCP policy admission through the installed Stacktrace CLI.", "hooks": "./hooks/codex.json"}:
+        fail("Codex must select its own hooks and keep release metadata in the shared manifest")
+    codex_hooks = load_json("hooks/codex.json")
+    expected_codex = {}
+    for event, command in (("SessionStart", "register"), ("PreToolUse", "admit")):
+        group = {"hooks": [{"type": "command", "command": f'sh "${{PLUGIN_ROOT}}/scripts/policy_hook.sh" {command} --agent-kind codex', "timeout": 5}]}
+        if event == "PreToolUse":
+            group["matcher"] = "^mcp__.*"
+        expected_codex[event] = [group]
+    if codex_hooks != {"hooks": expected_codex}:
+        fail("Codex hooks must delegate registration and MCP admission through the failure wrapper")
 
     if not isinstance(manifest, dict) or manifest.get("name") != "stacktrace":
         fail("plugin manifest must name stacktrace")
