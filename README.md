@@ -262,8 +262,12 @@ codex plugin add stacktrace@stacktrace-dev
 Start Codex and review the Stacktrace hooks in `/hooks`.
 Installation alone does not grant native hook trust.
 Start a new session after trust changes.
+Send a message that does not need a tool, such as `Say ready without calling a tool.`
+In the tested app-server path, SessionStart runs when the first user turn starts.
+Opening a session alone does not register the project.
 Check the project with `stacktrace remote policy hooks status --agent-kind codex`.
 Use `stacktrace remote policy show` to see the active policy.
+Wait for a valid scope before testing a blocked MCP tool.
 
 Stable Codex 0.163.0 is the conformance reference.
 The Codex manifest mirrors the shared version in `.claude-plugin/plugin.json`.
