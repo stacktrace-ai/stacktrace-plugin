@@ -34,8 +34,8 @@ def main() -> int:
     hooks = load_json("hooks/hooks.json")
     monitors = load_json("monitors/monitors.json")
     codex = load_json(".codex-plugin/plugin.json")
-    if codex != {"name": "stacktrace", "description": "Hook-visible MCP policy admission through the installed Stacktrace CLI.", "hooks": "./hooks/codex.json"}:
-        fail("Codex must select its own hooks and keep release metadata in the shared manifest")
+    if codex != {"name": "stacktrace", "version": manifest.get("version"), "description": "Hook-visible MCP policy admission through the installed Stacktrace CLI.", "hooks": "./hooks/codex.json"}:
+        fail("Codex must select its own hooks and mirror the shared release version")
     codex_hooks = load_json("hooks/codex.json")
     expected_codex = {}
     for event, command in (("SessionStart", "register"), ("PreToolUse", "admit")):
