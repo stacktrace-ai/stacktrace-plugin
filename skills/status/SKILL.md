@@ -39,7 +39,7 @@ say which checks did not run.
    over an older `PATH` copy. Keep an active virtual environment's own copy.
    Run:
    ```sh
-   if [ -x "$HOME/.local/bin/stacktrace" ] && { [ -z "${VIRTUAL_ENV:-}" ] || [ "$(command -v stacktrace 2>/dev/null || true)" != "$VIRTUAL_ENV/bin/stacktrace" ]; }; then echo "$HOME/.local/bin/stacktrace"; else command -v stacktrace; fi
+   if [ -n "${VIRTUAL_ENV:-}" ] && [ -x "$VIRTUAL_ENV/bin/stacktrace" ]; then echo "$VIRTUAL_ENV/bin/stacktrace"; elif [ -x "$HOME/.local/bin/stacktrace" ]; then echo "$HOME/.local/bin/stacktrace"; else command -v stacktrace; fi
    ```
    Use that result in place of `stacktrace` in every command below, including
    `--version`.
