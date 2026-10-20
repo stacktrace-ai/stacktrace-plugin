@@ -226,3 +226,47 @@ A local native-host test does not verify hosted worker migration.
 Verify a hosted start and resume before remote rollout.
 
 See [ADR-0009](docs/adrs/0009-delegate-session-registration-to-the-cli.md).
+
+## Codex CLI policy hooks
+
+The development adapter covers MCP tool use, including MCP servers with known plugin ownership.
+It calls the same user daemon as Claude.
+It does not add a notification monitor or a skill admission event.
+Desktop and cloud need separate conformance tests before rollout.
+
+The CLI needs the Codex admission commands and the public Codex evidence collector.
+An older or missing CLI continues through native permissions.
+An unavailable daemon also continues.
+Unknown namespaces follow the MCP policy default.
+Plugin loading and skill context injection remain outside hook coverage.
+
+Codex reads `.codex-plugin/plugin.json` and `hooks/codex.json`.
+The plugin reuses `scripts/policy_hook.sh` to discard output after failed CLI commands.
+The command performs no evaluation in this repository.
+
+The production marketplace pin remains unchanged.
+Use a temporary local marketplace to test this development checkout:
+
+```bash
+TEST_MARKETPLACE="$(mktemp -d /tmp/stacktrace-codex-marketplace.XXXXXX)"
+mkdir -p "$TEST_MARKETPLACE/.claude-plugin" "$TEST_MARKETPLACE/plugins"
+git clone git@github.com:stacktrace-ai/stacktrace-plugin.git \
+  -b feat/codex-policy-hooks "$TEST_MARKETPLACE/plugins/stacktrace"
+cat > "$TEST_MARKETPLACE/.claude-plugin/marketplace.json" <<'JSON'
+{"name":"stacktrace-dev","plugins":[{"name":"stacktrace","source":"./plugins/stacktrace"}]}
+JSON
+codex plugin marketplace add "$TEST_MARKETPLACE"
+codex plugin add stacktrace@stacktrace-dev
+```
+
+Start Codex and review the Stacktrace hooks in `/hooks`.
+Installation alone does not grant native hook trust.
+Start a new session after trust changes.
+Check the project with `stacktrace remote policy hooks status --agent-kind codex`.
+Use `stacktrace remote policy show` to see the active policy.
+
+Stable Codex 0.163.0 is the conformance reference.
+It accepts a Codex manifest without a separate version field.
+The production marketplace uses the existing immutable source commit.
+The shared release version remains in `.claude-plugin/plugin.json`.
+A release promotion must test both native hosts before changing that pin.
