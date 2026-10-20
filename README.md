@@ -266,7 +266,9 @@ Check the project with `stacktrace remote policy hooks status --agent-kind codex
 Use `stacktrace remote policy show` to see the active policy.
 
 Stable Codex 0.163.0 is the conformance reference.
-It accepts a Codex manifest without a separate version field.
-The production marketplace uses the existing immutable source commit.
-The shared release version remains in `.claude-plugin/plugin.json`.
+The Codex manifest mirrors the shared version in `.claude-plugin/plugin.json`.
+The validator rejects different versions between the native manifests.
+Native Codex can skip cache refresh when the manifest version does not change.
+The release skill updates both runtime manifests together.
+The production marketplace keeps its immutable source commit.
 A release promotion must test both native hosts before changing that pin.

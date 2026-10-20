@@ -2,6 +2,8 @@
 
 import json
 import os
+import shutil
+import sys
 import subprocess
 import tempfile
 import unittest
@@ -32,6 +34,25 @@ class CodexHooksTests(unittest.TestCase):
             self.assertIn('policy_hook.sh', handler['command'])
             self.assertIn(operation + ' --agent-kind codex', handler['command'])
             self.assertNotIn('onFailure', handler)
+
+
+class CodexVersionTests(unittest.TestCase):
+    def test_native_manifests_share_the_same_release_version(self):
+        claude = json.loads((ROOT / '.claude-plugin/plugin.json').read_text())
+        codex = json.loads((ROOT / '.codex-plugin/plugin.json').read_text())
+        self.assertEqual(codex.get('version'), claude['version'])
+
+    def test_validator_rejects_manifest_version_drift(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            shutil.copytree(ROOT, root, dirs_exist_ok=True, ignore=shutil.ignore_patterns('.git', '__pycache__'))
+            manifest = root / '.codex-plugin/plugin.json'
+            document = json.loads(manifest.read_text())
+            document['version'] = '0.0.1'
+            manifest.write_text(json.dumps(document))
+            result = subprocess.run([sys.executable, str(root / 'scripts/validate_plugin.py')], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 1)
+            self.assertIn('shared release version', result.stderr)
 
 
 if __name__ == '__main__':
