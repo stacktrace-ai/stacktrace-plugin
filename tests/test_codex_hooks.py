@@ -21,7 +21,9 @@ class CodexHooksTests(unittest.TestCase):
                 with self.subTest(exit_code=exit_code):
                     binary.write_text("#!/bin/sh\nprintf '%s\\n' '{\"hookSpecificOutput\":{\"permissionDecision\":\"deny\"}}'\nexit " + str(exit_code) + "\n")
                     binary.chmod(0o700)
-                    result = subprocess.run(['sh', str(ROOT / 'scripts/policy_hook.sh'), 'admit', '--agent-kind', 'codex'], input='{}', capture_output=True, text=True, env={**os.environ, 'HOME': str(root), 'PATH': str(root) + os.pathsep + os.environ['PATH']})
+                    environment = {**os.environ, 'HOME': str(root), 'PATH': str(root) + os.pathsep + os.environ['PATH']}
+                    environment.pop('VIRTUAL_ENV', None)
+                    result = subprocess.run(['sh', str(ROOT / 'scripts/policy_hook.sh'), 'admit', '--agent-kind', 'codex'], input='{}', capture_output=True, text=True, env=environment)
                     self.assertEqual(result.returncode, 0)
                     self.assertEqual(result.stdout, '')
 
