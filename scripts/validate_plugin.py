@@ -30,6 +30,8 @@ def load_json(relative: str) -> Any:
 
 def main() -> int:
     manifest = load_json(".claude-plugin/plugin.json")
+    if not isinstance(manifest, dict) or manifest.get("name") != "stacktrace":
+        fail("plugin manifest must name stacktrace")
     marketplace = load_json(".claude-plugin/marketplace.json")
     hooks = load_json("hooks/hooks.json")
     monitors = load_json("monitors/monitors.json")
@@ -46,8 +48,6 @@ def main() -> int:
     if codex_hooks != {"hooks": expected_codex}:
         fail("Codex hooks must delegate registration and MCP admission through the failure wrapper")
 
-    if not isinstance(manifest, dict) or manifest.get("name") != "stacktrace":
-        fail("plugin manifest must name stacktrace")
     version = manifest.get("version")
     semver_number = r"(?:0|[1-9][0-9]*)"
     if not isinstance(version, str) or not re.fullmatch(

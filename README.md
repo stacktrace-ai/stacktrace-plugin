@@ -250,8 +250,7 @@ Use a temporary local marketplace to test this development checkout:
 ```bash
 TEST_MARKETPLACE="$(mktemp -d /tmp/stacktrace-codex-marketplace.XXXXXX)"
 mkdir -p "$TEST_MARKETPLACE/.claude-plugin" "$TEST_MARKETPLACE/plugins"
-git clone git@github.com:stacktrace-ai/stacktrace-plugin.git \
-  -b feat/codex-policy-hooks "$TEST_MARKETPLACE/plugins/stacktrace"
+ln -s "$(git rev-parse --show-toplevel)" "$TEST_MARKETPLACE/plugins/stacktrace"
 cat > "$TEST_MARKETPLACE/.claude-plugin/marketplace.json" <<'JSON'
 {"name":"stacktrace-dev","plugins":[{"name":"stacktrace","source":"./plugins/stacktrace"}]}
 JSON
