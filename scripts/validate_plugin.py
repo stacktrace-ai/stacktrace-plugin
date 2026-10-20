@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate the intentionally small Stacktrace Claude plugin surface."""
+"""Validate the intentionally small Stacktrace host integration surface."""
 
 from __future__ import annotations
 

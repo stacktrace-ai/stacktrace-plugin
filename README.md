@@ -9,7 +9,7 @@ Claude adapter declares one session-lifetime monitor, adds notification guidance
 at session start, and provides status and findings workflows.
 Parsing, detection, policy, persistence, and routing remain in Stacktrace.
 
-Future Codex and Cursor adapters belong in this repository. Host-specific
+The Codex policy adapter and future Cursor adapters belong in this repository. Host-specific
 packaging and lifecycle integration stay separate; they share the Stacktrace
 daemon interface rather than duplicating detection logic.
 
