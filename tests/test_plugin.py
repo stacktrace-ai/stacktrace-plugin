@@ -580,8 +580,7 @@ class LifecycleWorkflowTests(unittest.TestCase):
         same way session_start.sh does rather than trust a bare `stacktrace`
         that a stale system copy ahead on PATH would resolve differently."""
         condition = (
-            'if [ -x "$HOME/.local/bin/stacktrace" ] && { [ -z "${VIRTUAL_ENV:-}" ] '
-            '|| [ "$(command -v stacktrace 2>/dev/null || true)" != "$VIRTUAL_ENV/bin/stacktrace" ]; }; then'
+            'if [ -n "${VIRTUAL_ENV:-}" ] && [ -x "$VIRTUAL_ENV/bin/stacktrace" ]; then'
         )
         session_start = (ROOT / "scripts" / "session_start.sh").read_text(encoding="utf-8")
         self.assertIn(condition, session_start)
@@ -789,7 +788,7 @@ class PolicyHookContractTests(unittest.TestCase):
                 stubs.cleanup()
 
     def test_default_user_install_wins_over_a_stale_path_copy_unless_a_venv_is_active(self):
-        for virtualenv in ("", "active", "unrelated"):
+        for virtualenv in ("", "active", "active_reordered", "active_missing_path", "unrelated"):
             with self.subTest(virtualenv=virtualenv), tempfile.TemporaryDirectory() as home:
                 stubs = Stubs()
                 try:
@@ -799,17 +798,21 @@ class PolicyHookContractTests(unittest.TestCase):
                     cli.write_text('#!/bin/sh\nprintf user-cli\n')
                     cli.chmod(0o755)
                     environment = isolated(home, stubs, VIRTUAL_ENV=virtualenv)
-                    if virtualenv == "active":
+                    if virtualenv.startswith("active"):
                         venv = Path(home) / "venv"
                         venv.mkdir()
                         (venv / "bin").symlink_to(stubs.cli, target_is_directory=True)
                         environment.update(VIRTUAL_ENV=str(venv), PATH=str(venv / "bin") + os.pathsep + str(stubs.tools))
+                        if virtualenv == "active_reordered":
+                            environment["PATH"] = str(local) + os.pathsep + environment["PATH"]
+                        elif virtualenv == "active_missing_path":
+                            environment["PATH"] = str(stubs.tools)
                     result = subprocess.run(
                         ["sh", str(ROOT / "scripts/policy_hook.sh"), "admit"],
                         input='{}', text=True, capture_output=True, env=environment, check=False,
                     )
                     self.assertEqual(result.returncode, 0)
-                    self.assertEqual(result.stdout, "" if virtualenv == "active" else "user-cli\n")
+                    self.assertEqual(result.stdout, "" if virtualenv.startswith("active") else "user-cli\n")
                 finally:
                     stubs.cleanup()
 

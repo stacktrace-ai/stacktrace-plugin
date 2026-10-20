@@ -41,7 +41,10 @@ ADAPTER_CALL_TIMEOUT="${STACKTRACE_ADAPTER_CALL_TIMEOUT:-5}"
 
 # A root installer switches to the target user and installs into this directory.
 # Claude can inherit PATH before uv updates the shell profile.
-if [ -x "$HOME/.local/bin/stacktrace" ] && { [ -z "${VIRTUAL_ENV:-}" ] || [ "$(command -v stacktrace 2>/dev/null || true)" != "$VIRTUAL_ENV/bin/stacktrace" ]; }; then
+if [ -n "${VIRTUAL_ENV:-}" ] && [ -x "$VIRTUAL_ENV/bin/stacktrace" ]; then
+  PATH="$VIRTUAL_ENV/bin:$PATH"
+  export PATH
+elif [ -x "$HOME/.local/bin/stacktrace" ]; then
   PATH="$HOME/.local/bin:$PATH"
   export PATH
 fi

@@ -222,6 +222,7 @@ A missing or incompatible CLI cannot corrupt that guidance or block Claude.
 The script implements no daemon lifecycle or policy logic.
 The subscription and hook scripts prefer the default per-user CLI over an older system copy.
 An active development virtualenv keeps its CLI selection.
+The hooks restore its executable path if a login shell reorders `PATH`.
 A local native-host test does not verify hosted worker migration.
 Verify a hosted start and resume before remote rollout.
 
