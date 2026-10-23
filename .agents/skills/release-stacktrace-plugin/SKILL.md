@@ -5,7 +5,8 @@ description: Use when cutting a new Stacktrace plugin release or promoting a plu
 
 # release-stacktrace-plugin
 
-This procedure releases the shared Stacktrace plugin for Claude and Codex CLI.
+This procedure releases the shared Stacktrace plugin for Claude, Codex, and
+Cursor CLI.
 The production marketplace pins this repository by an exact commit SHA ([ADR-0010](../../../docs/adrs/0010-pin-production-plugin-commits.md)).
 A merge to `main` does not release anything. A release is the promotion PR
 that moves the pin to a tested, tagged commit.
@@ -27,7 +28,7 @@ version". Also invoke it when someone edits `version` in
 
 | Step | Changes | Effect for users |
 | --- | --- | --- |
-| Release PR | Both runtime manifest versions, `docs/releases/v<version>.md` | None. The pin does not move. |
+| Release PR | All three runtime manifest versions, `docs/releases/v<version>.md` | None. The pin does not move. |
 | Tag | `v<version>` on the merged release commit | None. |
 | Promotion PR | The `marketplace.json` entry only: `source.sha` and its display fields | Fresh installs and `claude plugin update` select `<version>`. |
 
@@ -146,9 +147,10 @@ If the user did not explicitly ask to cut, ship or publish a release, stop
 before the push and ask. An edit to the version field invokes this skill. It
 does not give permission to publish.
 
-Change the version in both native runtime manifests and add the notes.
+Change the version in the three native runtime manifests and add the notes.
 Keep `.claude-plugin/plugin.json` as the canonical release version.
-Mirror it in `.codex-plugin/plugin.json`; the validator checks equality.
+Mirror it in `.codex-plugin/plugin.json` and `.cursor-plugin/plugin.json`.
+The validator checks equality.
 Do not change `.claude-plugin/marketplace.json`.
 The pin stays where it is. Development can
 bump the version on `main` ahead of a release. If `plugin.json` on `main`
@@ -159,16 +161,16 @@ set -e
 git checkout -b release/<version>
 python3 - "<version>" <<'EOF'
 import json, sys
-for path in (".claude-plugin/plugin.json", ".codex-plugin/plugin.json"):
+for path in (".claude-plugin/plugin.json", ".codex-plugin/plugin.json", ".cursor-plugin/plugin.json"):
     manifest = json.load(open(path))
     manifest["version"] = sys.argv[1]
     open(path, "w").write(json.dumps(manifest, indent=2) + "\n")
 EOF
-git diff --stat                                    # Both runtime manifests, or nothing if they already carry <version>
+git diff --stat                                    # The runtime manifests, or nothing if they already carry <version>
 python3 scripts/validate_plugin.py
 python3 -m unittest discover -s tests -v
 claude plugin validate --strict .
-git add .claude-plugin/plugin.json .codex-plugin/plugin.json docs/releases/v<version>.md
+git add .claude-plugin/plugin.json .codex-plugin/plugin.json .cursor-plugin/plugin.json docs/releases/v<version>.md
 git status --porcelain                             # inspect anything still unstaged
 git commit -m "release: <version> — <theme>"
 git push -u origin release/<version>
@@ -236,6 +238,11 @@ Run the CLI repository's native Codex conformance suite with this candidate chec
 Use the published compatible CLI dependency and the native Codex executable.
 Check the candidate's Codex version against its Claude version.
 Keep desktop and cloud claims outside these CLI results.
+
+Run the stacktrace-demo repository's native `cursor_hooks` conformance suite
+with this candidate checkout. Use the published compatible CLI dependency
+and the native Cursor executable. Keep desktop app and public marketplace
+claims outside these CLI results.
 
 Run the native Claude install and update probe. It uses an isolated
 `CLAUDE_CONFIG_DIR`, so it does not touch the user's own plugins. It installs

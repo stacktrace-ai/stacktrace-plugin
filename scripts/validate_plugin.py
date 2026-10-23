@@ -47,6 +47,19 @@ def main() -> int:
         expected_codex[event] = [group]
     if codex_hooks != {"hooks": expected_codex}:
         fail("Codex hooks must delegate registration and MCP admission through the failure wrapper")
+    cursor = load_json(".cursor-plugin/plugin.json")
+    # Cursor auto-discovers every skills/*/SKILL.md when the field is absent; an
+    # explicit empty list keeps Claude-only skills out of the Cursor surface.
+    if cursor != {"name": "stacktrace", "version": manifest.get("version"), "description": "Hook-visible MCP policy admission through the installed Stacktrace CLI.", "hooks": "./hooks/cursor.json", "skills": []}:
+        fail("Cursor must select its own hooks, disable skill auto-discovery, and mirror the shared release version")
+    # Cursor runs plugin hooks from the plugin root, and fails open without failClosed.
+    # sessionStart gets a longer timeout so registration survives daemon recovery (ADR-0009).
+    expected_cursor = {
+        event: [{"command": f"sh ./scripts/policy_hook.sh {command} --agent-kind cursor", "timeout": timeout}]
+        for event, command, timeout in (("sessionStart", "register", 15), ("beforeMCPExecution", "admit", 5))
+    }
+    if load_json("hooks/cursor.json") != {"version": 1, "hooks": expected_cursor}:
+        fail("Cursor hooks must delegate registration and MCP admission through the failure wrapper")
 
     version = manifest.get("version")
     semver_number = r"(?:0|[1-9][0-9]*)"
