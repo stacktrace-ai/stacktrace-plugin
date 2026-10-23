@@ -51,9 +51,10 @@ def main() -> int:
     if cursor != {"name": "stacktrace", "version": manifest.get("version"), "description": "Hook-visible MCP policy admission through the installed Stacktrace CLI.", "hooks": "./hooks/cursor.json"}:
         fail("Cursor must select its own hooks and mirror the shared release version")
     # Cursor runs plugin hooks from the plugin root, and fails open without failClosed.
+    # sessionStart gets a longer timeout so registration survives daemon recovery (ADR-0009).
     expected_cursor = {
-        event: [{"command": f"sh ./scripts/policy_hook.sh {command} --agent-kind cursor", "timeout": 5}]
-        for event, command in (("sessionStart", "register"), ("beforeMCPExecution", "admit"))
+        event: [{"command": f"sh ./scripts/policy_hook.sh {command} --agent-kind cursor", "timeout": timeout}]
+        for event, command, timeout in (("sessionStart", "register", 15), ("beforeMCPExecution", "admit", 5))
     }
     if load_json("hooks/cursor.json") != {"version": 1, "hooks": expected_cursor}:
         fail("Cursor hooks must delegate registration and MCP admission through the failure wrapper")

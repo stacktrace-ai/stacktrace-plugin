@@ -33,11 +33,22 @@ class CursorHooksTests(unittest.TestCase):
         hooks = json.loads((ROOT / manifest['hooks']).read_text())
         self.assertEqual(hooks['version'], 1)
         self.assertEqual(set(hooks['hooks']), {'sessionStart', 'beforeMCPExecution'})
-        for event, operation in (('sessionStart', 'register'), ('beforeMCPExecution', 'admit')):
+        for event, operation, timeout in (('sessionStart', 'register', 15), ('beforeMCPExecution', 'admit', 5)):
             handler = hooks['hooks'][event][0]
             self.assertTrue(handler['command'].startswith('sh ./scripts/policy_hook.sh '))
             self.assertIn(operation + ' --agent-kind cursor', handler['command'])
             self.assertNotIn('failClosed', handler)
+            self.assertEqual(handler['timeout'], timeout)
+
+    def test_session_start_gives_registration_room_to_survive_daemon_recovery(self):
+        # The CLI can spend its own readiness window recovering the daemon
+        # before it registers (ADR-0009); an equal outer timeout could kill
+        # registration just before it completes, as the Claude entrypoint's
+        # own longer SessionStart timeout already accounts for.
+        hooks = json.loads((ROOT / 'hooks/cursor.json').read_text())
+        session_start_timeout = hooks['hooks']['sessionStart'][0]['timeout']
+        admit_timeout = hooks['hooks']['beforeMCPExecution'][0]['timeout']
+        self.assertGreater(session_start_timeout, admit_timeout)
 
 
 class CursorVersionTests(unittest.TestCase):
