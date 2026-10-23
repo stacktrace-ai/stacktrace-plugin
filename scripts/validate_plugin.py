@@ -47,6 +47,16 @@ def main() -> int:
         expected_codex[event] = [group]
     if codex_hooks != {"hooks": expected_codex}:
         fail("Codex hooks must delegate registration and MCP admission through the failure wrapper")
+    cursor = load_json(".cursor-plugin/plugin.json")
+    if cursor != {"name": "stacktrace", "version": manifest.get("version"), "description": "Hook-visible MCP policy admission through the installed Stacktrace CLI.", "hooks": "./hooks/cursor.json"}:
+        fail("Cursor must select its own hooks and mirror the shared release version")
+    # Cursor runs plugin hooks from the plugin root, and fails open without failClosed.
+    expected_cursor = {
+        event: [{"command": f"sh ./scripts/policy_hook.sh {command} --agent-kind cursor", "timeout": 5}]
+        for event, command in (("sessionStart", "register"), ("beforeMCPExecution", "admit"))
+    }
+    if load_json("hooks/cursor.json") != {"version": 1, "hooks": expected_cursor}:
+        fail("Cursor hooks must delegate registration and MCP admission through the failure wrapper")
 
     version = manifest.get("version")
     semver_number = r"(?:0|[1-9][0-9]*)"

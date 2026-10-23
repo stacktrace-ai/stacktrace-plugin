@@ -1,0 +1,6 @@
+{
+  "name": "stacktrace",
+  "version": "0.3.2",
+  "description": "Hook-visible MCP policy admission through the installed Stacktrace CLI.",
+  "hooks": "./hooks/cursor.json"
+}

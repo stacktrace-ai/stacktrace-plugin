@@ -9,7 +9,7 @@ Claude adapter declares one session-lifetime monitor, adds notification guidance
 at session start, and provides status and findings workflows.
 Parsing, detection, policy, persistence, and routing remain in Stacktrace.
 
-The Codex policy adapter and future Cursor adapters belong in this repository. Host-specific
+The Codex and Cursor policy adapters belong in this repository. Host-specific
 packaging and lifecycle integration stay separate; they share the Stacktrace
 daemon interface rather than duplicating detection logic.
 
@@ -276,3 +276,27 @@ Native Codex can skip cache refresh when the manifest version does not change.
 The release skill updates both runtime manifests together.
 The production marketplace keeps its immutable source commit.
 A release promotion must test both native hosts before changing that pin.
+
+## Cursor policy hooks
+
+The Cursor adapter covers MCP tool use, including MCP servers that a plugin bundles.
+It calls the same user daemon as Claude and Codex.
+It adds no notification monitor and no skill, command or sub-agent admission.
+The Cursor CLI fires no admission event for those.
+
+Cursor reads `.cursor-plugin/plugin.json` and `hooks/cursor.json`.
+The `sessionStart` hook registers the project.
+The `beforeMCPExecution` hook asks the daemon for a decision.
+Both hooks run `scripts/policy_hook.sh` from the plugin root.
+The wrapper prints nothing when the CLI fails, so Cursor's own approval decides.
+The hooks do not set `failClosed`.
+
+The CLI needs `--agent-kind cursor` and an OpenACA release that collects Cursor evidence.
+Check the project with `stacktrace remote policy hooks status --agent-kind cursor`.
+Wait for a valid scope before testing a blocked MCP tool.
+
+The Cursor CLI `2026.10.22-27dcf5f` is the conformance reference.
+Its local-inference build runs the native tests with no account.
+The stacktrace repository holds the conformance test, and stacktrace-demo holds the end-to-end suite.
+The Cursor manifest mirrors the shared version in `.claude-plugin/plugin.json`.
+The desktop app and Cursor's public marketplace are not yet tested.
