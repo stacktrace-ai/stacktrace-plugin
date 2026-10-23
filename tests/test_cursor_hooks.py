@@ -28,6 +28,13 @@ class CursorHooksTests(unittest.TestCase):
                     self.assertEqual(result.returncode, 0)
                     self.assertEqual(result.stdout, '')
 
+    def test_cursor_manifest_disables_skill_auto_discovery(self):
+        # Cursor auto-discovers every skills/*/SKILL.md when the field is
+        # absent, but skills/findings and skills/status hardcode
+        # --agent-kind claude-code and CLAUDE_CODE_SESSION_ID: wrong host.
+        manifest = json.loads((ROOT / '.cursor-plugin/plugin.json').read_text())
+        self.assertEqual(manifest.get('skills'), [])
+
     def test_cursor_manifest_selects_only_its_native_hooks(self):
         manifest = json.loads((ROOT / '.cursor-plugin/plugin.json').read_text())
         hooks = json.loads((ROOT / manifest['hooks']).read_text())
