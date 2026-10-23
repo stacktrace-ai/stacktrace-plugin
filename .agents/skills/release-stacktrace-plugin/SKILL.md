@@ -5,7 +5,8 @@ description: Use when cutting a new Stacktrace plugin release or promoting a plu
 
 # release-stacktrace-plugin
 
-This procedure releases the shared Stacktrace plugin for Claude and Codex CLI.
+This procedure releases the shared Stacktrace plugin for Claude, Codex, and
+Cursor CLI.
 The production marketplace pins this repository by an exact commit SHA ([ADR-0010](../../../docs/adrs/0010-pin-production-plugin-commits.md)).
 A merge to `main` does not release anything. A release is the promotion PR
 that moves the pin to a tested, tagged commit.
@@ -27,7 +28,7 @@ version". Also invoke it when someone edits `version` in
 
 | Step | Changes | Effect for users |
 | --- | --- | --- |
-| Release PR | Both runtime manifest versions, `docs/releases/v<version>.md` | None. The pin does not move. |
+| Release PR | All three runtime manifest versions, `docs/releases/v<version>.md` | None. The pin does not move. |
 | Tag | `v<version>` on the merged release commit | None. |
 | Promotion PR | The `marketplace.json` entry only: `source.sha` and its display fields | Fresh installs and `claude plugin update` select `<version>`. |
 
@@ -237,6 +238,11 @@ Run the CLI repository's native Codex conformance suite with this candidate chec
 Use the published compatible CLI dependency and the native Codex executable.
 Check the candidate's Codex version against its Claude version.
 Keep desktop and cloud claims outside these CLI results.
+
+Run the stacktrace-demo repository's native `cursor_hooks` conformance suite
+with this candidate checkout. Use the published compatible CLI dependency
+and the native Cursor executable. Keep desktop app and public marketplace
+claims outside these CLI results.
 
 Run the native Claude install and update probe. It uses an isolated
 `CLAUDE_CONFIG_DIR`, so it does not touch the user's own plugins. It installs
