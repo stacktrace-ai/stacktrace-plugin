@@ -112,6 +112,14 @@ def main() -> int:
     ):
         fail("marketplace must pin the official stacktrace plugin to an exact commit "
              "and carry well-formed display fields")
+    # Cursor refuses a sha-pinned commit whose tree holds a url-source catalog,
+    # which every release carries, so users pin a release tag instead (ADR-0011).
+    if load_json(".cursor-plugin/marketplace.json") != {
+        "name": "stacktrace",
+        "owner": {"name": "Stacktrace AI"},
+        "plugins": [{"name": "stacktrace", "source": "./"}],
+    }:
+        fail("Cursor marketplace must list only this repository's root plugin")
 
     if monitors != [
         {

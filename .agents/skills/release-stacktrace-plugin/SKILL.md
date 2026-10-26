@@ -29,7 +29,7 @@ version". Also invoke it when someone edits `version` in
 | Step | Changes | Effect for users |
 | --- | --- | --- |
 | Release PR | All three runtime manifest versions, `docs/releases/v<version>.md` | None. The pin does not move. |
-| Tag | `v<version>` on the merged release commit | None. |
+| Tag | `v<version>` on the merged release commit | Cursor users can install it with `--git-ref v<version>` (ADR-0011). |
 | Promotion PR | The `marketplace.json` entry only: `source.sha` and its display fields | Fresh installs and `claude plugin update` select `<version>`. |
 
 The GitHub Release comes last, after the promotion PR merges. The Releases

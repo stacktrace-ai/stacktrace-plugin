@@ -284,6 +284,25 @@ It calls the same user daemon as Claude and Codex.
 It adds no notification monitor and no skill, command or sub-agent admission.
 The Cursor CLI fires no admission event for those.
 
+Add the marketplace to the Cursor CLI at a release tag:
+
+```sh
+agent plugin marketplace add github.com/stacktrace-ai/stacktrace-plugin --git-ref v<release>
+```
+
+Then run `agent`, open `/plugins` and enable `stacktrace`.
+Start a new session after you enable it.
+Plugin 0.3.3 is the first release with the Cursor adapter.
+
+Cursor reads `.cursor-plugin/marketplace.json`, which lists this repository's root (ADR-0011).
+The tag selects the commit.
+Without `--git-ref`, Cursor follows `main`, which holds unreleased code.
+To move to a newer release, run the same command with the new tag.
+Cursor replaces the tag and keeps the plugin enabled.
+
+Test a checkout with `agent --plugin-dir <checkout>`.
+Cursor reads `~/.cursor/plugins/local` only when a team admin allows user plugin imports.
+
 Cursor reads `.cursor-plugin/plugin.json` and `hooks/cursor.json`.
 The `sessionStart` hook registers the project.
 The `beforeMCPExecution` hook asks the daemon for a decision.

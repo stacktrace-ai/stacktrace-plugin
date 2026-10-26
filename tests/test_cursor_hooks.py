@@ -47,6 +47,34 @@ class CursorHooksTests(unittest.TestCase):
             self.assertNotIn('failClosed', handler)
             self.assertEqual(handler['timeout'], timeout)
 
+    def test_cursor_marketplace_lists_the_root_plugin(self):
+        # Cursor reads this catalog before the Claude one; the user's
+        # --git-ref release tag selects the commit (ADR-0011).
+        catalog = json.loads((ROOT / '.cursor-plugin/marketplace.json').read_text())
+        self.assertEqual(catalog['name'], 'stacktrace')
+        self.assertEqual(catalog['plugins'], [{'name': 'stacktrace', 'source': './'}])
+
+    def test_validator_rejects_a_cursor_marketplace_with_another_source(self):
+        # A sha-pinned source installs nothing in Cursor, because every
+        # release commit carries the url-pinned Claude catalog.
+        url_source = {'source': 'url', 'url': 'https://github.com/stacktrace-ai/stacktrace-plugin.git', 'sha': 'a' * 40}
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            shutil.copytree(ROOT, root, dirs_exist_ok=True, ignore=shutil.ignore_patterns('.git', '__pycache__'))
+            path = root / '.cursor-plugin/marketplace.json'
+            catalog = json.loads(path.read_text())
+            for source in (url_source, './plugins/stacktrace'):
+                with self.subTest(source=source):
+                    catalog['plugins'][0]['source'] = source
+                    path.write_text(json.dumps(catalog))
+                    result = subprocess.run([sys.executable, str(root / 'scripts/validate_plugin.py')], capture_output=True, text=True)
+                    self.assertEqual(result.returncode, 1)
+                    self.assertIn('Cursor marketplace', result.stderr)
+            path.unlink()
+            result = subprocess.run([sys.executable, str(root / 'scripts/validate_plugin.py')], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 1)
+            self.assertIn('missing .cursor-plugin/marketplace.json', result.stderr)
+
     def test_session_start_gives_registration_room_to_survive_daemon_recovery(self):
         # The CLI can spend its own readiness window recovering the daemon
         # before it registers (ADR-0009); an equal outer timeout could kill
