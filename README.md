@@ -290,7 +290,8 @@ Add the marketplace to the Cursor CLI at a release tag:
 agent plugin marketplace add github.com/stacktrace-ai/stacktrace-plugin --git-ref v<release>
 ```
 
-Then run `agent`, open `/plugins` and enable `stacktrace`.
+Then run `agent` and type `/plugin`.
+Press Tab to open the Marketplace tab, select `stacktrace` and choose Install.
 Start a new session after you enable it.
 Plugin 0.3.3 is the first release with the Cursor adapter.
 
