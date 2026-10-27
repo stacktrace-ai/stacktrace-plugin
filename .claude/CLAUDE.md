@@ -35,6 +35,7 @@ reports.
 - `scripts/validate_plugin.py` states the intended plugin surface; update it
   when the surface changes.
 - The production marketplace pins the official plugin repository by an exact commit SHA (ADR-0010).
+  `.cursor-plugin/marketplace.json` lists the root; Cursor users pin a release tag (ADR-0011).
   Keep the pin unchanged during ordinary development.
   Advance it only for an explicitly requested release promotion.
   The `release-stacktrace-plugin` skill drives a release and its promotion.

@@ -141,7 +141,7 @@ class PluginContractTests(unittest.TestCase):
     def _run_validator_with_version(self, version: str) -> subprocess.CompletedProcess[str]:
         with tempfile.TemporaryDirectory(prefix="stacktrace-plugin-scaffold-") as scaffold:
             shutil.copytree(ROOT, scaffold, dirs_exist_ok=True, ignore=shutil.ignore_patterns(".git"))
-            for host in (".claude-plugin", ".codex-plugin"):
+            for host in (".claude-plugin", ".codex-plugin", ".cursor-plugin"):
                 manifest_path = Path(scaffold, host, "plugin.json")
                 manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
                 manifest["version"] = version
