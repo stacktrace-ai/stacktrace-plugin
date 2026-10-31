@@ -1,0 +1,26 @@
+{
+  "SessionStart": [
+    {
+      "matcher": "",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "sh \"${DEVIN_PLUGIN_ROOT}/scripts/policy_hook.sh\" register --agent-kind devin",
+          "timeout": 15
+        }
+      ]
+    }
+  ],
+  "PreToolUse": [
+    {
+      "matcher": "^(mcp__.+|mcp_call_tool)$",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "sh \"${DEVIN_PLUGIN_ROOT}/scripts/policy_hook.sh\" admit --agent-kind devin",
+          "timeout": 5
+        }
+      ]
+    }
+  ]
+}
