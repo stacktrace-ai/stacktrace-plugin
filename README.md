@@ -327,6 +327,9 @@ The Devin adapter covers MCP tool use.
 It calls the same user daemon as Claude, Codex and Cursor.
 It adds no notification monitor and no skill, sub-agent or built-in tool admission.
 Fleet's MCP default decides each Devin MCP call, because OpenACA collects no Devin policy evidence yet.
+The hooks run only in local Devin sessions: the CLI and Devin Desktop.
+Devin registers plugin hooks only there, so cloud Devin sessions get no Fleet decision.
+A managed manifest that requires this plugin does not enforce Fleet policy in cloud sessions.
 
 The Devin plugin is the `devin` folder (ADR-0012).
 Devin reads `devin/.devin-plugin/plugin.json` and `devin/hooks.json`.
