@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "hooks": {
+    "sessionStart": [
+      {
+        "command": "sh ./scripts/policy_hook.sh register --agent-kind cursor",
+        "timeout": 15
+      }
+    ],
+    "beforeMCPExecution": [
+      {
+        "command": "sh ./scripts/policy_hook.sh admit --agent-kind cursor",
+        "timeout": 5
+      }
+    ]
+  }
+}

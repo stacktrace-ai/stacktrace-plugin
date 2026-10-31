@@ -9,6 +9,9 @@ that teaches the notification contract and shows a one-time welcome, and the
 status and findings skills. Parsing, detection, policy, persistence, routing
 and daemon lifecycle stay in the CLI; this repository owns packaging and
 Claude-specific integration only.
+SessionStart also delegates project registration to the stable CLI adapter.
+On both hosts, that adapter ensures daemon readiness before registration.
+The CLI owns recovery locks and reuses healthy daemons (ADR-0009).
 
 ## Common commands
 
@@ -31,10 +34,24 @@ reports.
   monitor in `monitors/monitors.json`. Paths go through `${CLAUDE_PLUGIN_ROOT}`.
 - `scripts/validate_plugin.py` states the intended plugin surface; update it
   when the surface changes.
+- The production marketplace pins the official plugin repository by an exact commit SHA (ADR-0010).
+  `.cursor-plugin/marketplace.json` lists the root; Cursor users pin a release tag (ADR-0011).
+  Keep the pin unchanged during ordinary development.
+  Advance it only for an explicitly requested release promotion.
+  The `release-stacktrace-plugin` skill drives a release and its promotion.
+  Test a development checkout with `--plugin-dir`.
+  Keep the runtime version in `plugin.json`, without a duplicate marketplace-entry version.
 - The plugin needs `stacktrace-cli` 0.5.2 or newer, the first release where the
   host or user starts the daemon and the session monitor only subscribes.
-- Hooks forward only session id, transcript path, cwd and event name; never
-  prompt, response or tool content. Hooks stay asynchronous and non-blocking.
+- Observation hooks remain non-blocking. The explicit policy adapter is
+  synchronous: it passes native stdin only to `stacktrace remote policy hooks
+  admit`, which strips prompts, arguments, responses and transcripts before
+  contacting the daemon. It never evaluates policy or scans in this repo.
+- Admission hooks require the CLI release containing `remote policy hooks`
+  and Claude Code 2.1.274 or newer. Upgrade the CLI before this plugin.
+  Missing/older CLI commands continue without a policy decision. On a compatible
+  CLI the daemon serves policy automatically after Fleet enrollment.
+  Plugin setup requires neither enrollment nor a running daemon.
 
 ---
 
@@ -127,12 +144,22 @@ the alternative we rejected? If yes, write the ADR.
 full ADR. The cost of one Read is much smaller than the cost of
 re-deriving or re-litigating a decision.
 
-**Supersede, never edit.** Accepted ADRs are immutable. If a later
-decision contradicts an existing ADR, write a NEW ADR with
+**Supersede or amend, never edit.** Accepted ADRs are immutable. If a later
+decision contradicts an existing ADR, write a NEW ADR that supersedes or
+amends it, as the next rule decides. For a supersession, put
 `supersedes: NNNN` in its frontmatter, and update the old one's
 frontmatter to `status: superseded` + `superseded-by: NNNN`. Old PRs
 need to remain readable against the rules in effect at the time —
 silently editing an accepted ADR breaks that contract.
+
+**Amend or supersede: one test.** Ask if any numbered decision in the old
+ADR still binds. If one does, amend: put `amends: NNNN` on the new ADR and
+`amended-by: NNNN` on the old one, and both stay active. If none does,
+supersede. Only this test decides. The size of the change, the importance
+of the replaced clause, and the old ADR's "When to revisit" text do not
+change the result. A reviewer reports the choice only when the finding
+names every numbered decision in the old ADR and shows that none still
+binds.
 
 ## Commits and PRs
 
@@ -203,12 +230,55 @@ If you discover unexpected state — unfamiliar files, branches,
 configuration — investigate before deleting or overwriting. It may
 represent the user's in-progress work.
 
+## Writing documents
+
+Write all Markdown documents in ASD-STE100 Simplified Technical English.
+This includes specs, ADRs, READMEs, plans and release notes. The rule
+applies to every author, human or agent.
+
+- Write one idea in each sentence.
+- Use a maximum of 20 words in an instruction and 25 words in a
+  description.
+- Use a maximum of six sentences in a paragraph.
+- Use the active voice and the present tense.
+- Start an instruction with a verb, for example "Run the tests."
+- Use "a", "an" and "the". Do not remove them to make the text shorter.
+- Use one term for one thing, and use it the same way in all of the
+  document.
+- Use simple, common words. Do not use filler, such as "in order to" or
+  "utilize".
+- Do not use em-dash asides. Write a new sentence.
+- Do not change technical names, commands or code. Code blocks, tables and
+  quoted text do not have to obey these rules.
+
+Apply these rules to the text that you write or change. Do not rewrite an
+existing document only to change its style. Do not edit an accepted ADR to
+change its style.
+
+These rules are for authors. They are not a code review topic. Reviewers
+do not report style findings.
+
 ## Code Review Rules
+
+**The goal of review is to converge.** The reviewer and the fixer both work
+toward a PR that can merge in few rounds. Each round costs a full CI run and
+a review, and a finding on text that was already reviewed starts another
+round. Converging does not mean letting a serious defect through. The first
+review catches the glaring issues, and later reviews check only what changed.
 
 ### Reviewer
 
-- Review the full PR against its base branch. Report all qualifying
-  findings together; do not deliberately reserve findings for later rounds.
+- **The first review of a PR is the complete one.** Review the full PR
+  against its base branch. Report every qualifying finding together. Do not
+  reserve findings for later rounds.
+- **A later review covers only what changed since the previous reviewed
+  head.** That is the PR's new commits, plus existing code whose behavior
+  those commits change, such as a caller or dependency of changed code.
+  Changes that a merge or rebase brings in from the base branch are not part
+  of it.
+- **Do not report a defect that existed at the previous reviewed head**,
+  unless the new commits change its behavior. Exception: report a P0 or P1
+  even if it existed before, and label it a late discovery.
 - Report concrete, actionable defects with supported failure scenarios.
   Respect explicit scope decisions and accepted tradeoffs. Do not present
   speculative hardening or optional improvements as correctness defects.
@@ -218,12 +288,16 @@ represent the user's in-progress work.
   - P2: normal-priority defect eligible for automatic fixing.
   - P3: low-priority suggestion.
   Do not inflate priority to make a finding eligible for automatic fixing.
-- On subsequent reviews, verify earlier fixes and inspect their effects on
-  callers and dependencies. Older code within the PR remains reviewable.
+- A missing detail or an optional improvement is never P1. This applies to
+  code and to documentation. A P1 is something wrong: a defect, or a false
+  statement.
+- On later reviews, verify that the earlier fixes work. Check their effects on
+  callers and dependencies.
 - When review history supports it, identify a finding as:
   - Regression: introduced since the previous reviewed head.
-  - Late discovery: present at a previously reviewed head but not reported.
   - Unresolved: a previously reported defect remains.
+  - Late discovery: present at a previously reviewed head but not reported.
+    Only a P0 or P1 may be a late discovery.
   If the history is unavailable or ambiguous, say so rather than guessing.
 - Deduplicate by underlying defect and remedy, not by title. Refer to an
   existing thread for an unresolved defect instead of opening another one.
@@ -239,6 +313,13 @@ represent the user's in-progress work.
   If its reasoning or priority is wrong, explain why rather than applying
   it solely because a reviewer requested it. Surface unresolved disputes
   for human judgment.
+- Decline a late discovery that is not P0 or P1. If the defect existed at the
+  previous reviewed head and the new commits do not change its behavior,
+  reply that the review rules exclude it, and do not fix it. A declined
+  finding does not count as a fix round.
+- Keep each fix to what its finding needs. Do not rewrite or extend nearby
+  code or text. A change beyond the finding gives the next review new
+  material to report, and the PR does not converge.
 - Fix the underlying invariant across relevant call sites. Test the
   failure class rather than only the reported example.
 - Preserve accepted fixes and regression tests when reviewing a rebased PR or
@@ -248,9 +329,18 @@ represent the user's in-progress work.
 - Batch related fixes into one tested update before requesting re-review.
   Avoid duplicate review requests for the same head.
 - An automated fixer pushes ordinary commits to the existing PR branch and
-  runs every required gate. It does not bypass gates, merge, rebase, or
-  force-push, or change workflows, permissions, credentials, or branch
-  protection. Report an environment failure or required rebase as a blocker.
+  runs every required gate. It does not bypass gates, merge, or change
+  workflows, permissions, credentials, or branch protection. It force-pushes
+  only after a rebase, as the next rule says. Report an environment failure
+  as a blocker.
+- When a PR branch conflicts with its base branch, the automated fixer
+  rebases it onto the current base branch. The base branch is normally
+  `main`. It resolves the conflicts, runs every required gate, and pushes
+  with `git push --force-with-lease`. It does not merge the base branch into
+  the PR branch. PR branches are rarely shared, so rewritten history is
+  acceptable. Report a conflict as a blocker when both sides change the same
+  logic and each resolution loses behavior. A rebase with no other change is
+  not a fix round.
 - After pushing fixes, wait for CI and a completed review of the current
   head. Silence, an older review, or a running review is not clearance.
 - Stop and ask for human input when the same failure repeats without progress.

@@ -8,6 +8,8 @@ import socket
 import subprocess
 import tempfile
 import sys
+import threading
+import time
 import unittest
 from pathlib import Path
 
@@ -29,7 +31,7 @@ exit 0
 """
 
 #: Every external command the hook runs.
-TOOLS = ("sh", "awk", "mkdir", "dirname", "sed", "tr", "id")
+TOOLS = ("sh", "awk", "mkdir", "dirname", "sed", "tr", "id", "sleep")
 
 
 class Stubs:
@@ -81,14 +83,18 @@ def isolated(home: str, stubs: Stubs, *, cli: bool = True, daemon: bool = True, 
         "CLAUDE_CONFIG_DIR",
         "CLAUDE_PLUGIN_DATA",
         "CLAUDE_CODE_REMOTE",
+        "VIRTUAL_ENV",
         "NO_COLOR",
         "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC",
         "DISABLE_TELEMETRY",
         "STUB_LOG",
         "STUB_VERSION",
         "STUB_TELEMETRY",
+        "STACKTRACE_ADAPTER_TIMEOUT",
+        "STACKTRACE_ADAPTER_CALL_TIMEOUT",
     ):
         environment.pop(name, None)
+    environment["STACKTRACE_ADAPTER_TIMEOUT"] = "0"
     environment.update(extra)
     return environment
 
@@ -135,10 +141,11 @@ class PluginContractTests(unittest.TestCase):
     def _run_validator_with_version(self, version: str) -> subprocess.CompletedProcess[str]:
         with tempfile.TemporaryDirectory(prefix="stacktrace-plugin-scaffold-") as scaffold:
             shutil.copytree(ROOT, scaffold, dirs_exist_ok=True, ignore=shutil.ignore_patterns(".git"))
-            manifest_path = Path(scaffold, ".claude-plugin", "plugin.json")
-            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-            manifest["version"] = version
-            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+            for host in (".claude-plugin", ".codex-plugin", ".cursor-plugin", "devin/.devin-plugin"):
+                manifest_path = Path(scaffold, host, "plugin.json")
+                manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+                manifest["version"] = version
+                manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
             return subprocess.run(
                 [sys.executable, str(Path(scaffold, "scripts", "validate_plugin.py"))],
                 check=False,
@@ -328,7 +335,7 @@ class PluginContractTests(unittest.TestCase):
 
     def test_plugin_has_no_turn_or_session_end_detection_hook(self) -> None:
         document = json.loads((ROOT / "hooks" / "hooks.json").read_text(encoding="utf-8"))
-        self.assertEqual(set(document["hooks"]), {"SessionStart"})
+        self.assertEqual(set(document["hooks"]), {"SessionStart", "PreToolUse", "UserPromptExpansion"})
 
     def test_monitor_invokes_the_stacktrace_subscription_directly(self) -> None:
         monitors = json.loads(
@@ -336,7 +343,7 @@ class PluginContractTests(unittest.TestCase):
         )
         self.assertEqual(len(monitors), 1)
         self.assertEqual(
-            monitors[0]["command"], "stacktrace daemon subscribe --agent-kind claude-code"
+            monitors[0]["command"], 'sh "${CLAUDE_PLUGIN_ROOT}/scripts/subscribe.sh"'
         )
 
 
@@ -363,11 +370,11 @@ class DiagnosisTests(unittest.TestCase):
     def calls(self) -> list[str]:
         return self.log.read_text().splitlines() if self.log.exists() else []
 
-    def test_a_healthy_session_says_nothing_and_starts_no_python(self) -> None:
+    def test_a_healthy_session_says_nothing_and_only_delegates_to_the_adapter(self) -> None:
         """The CLI check is `command -v` and the daemon check a socket test,
-        so a working machine never pays for a Python start."""
+        so a working machine adds no diagnostic CLI call."""
         self.assertEqual(self.shown(), [])
-        self.assertEqual(self.calls(), [])
+        self.assertEqual(self.calls(), ["remote policy hooks register"])
 
     def test_a_missing_cli_routes_to_status(self) -> None:
         self.assertEqual(
@@ -386,7 +393,64 @@ class DiagnosisTests(unittest.TestCase):
                 "lifecycle guidance."
             ],
         )
-        self.assertEqual(self.calls(), ["--version"])
+        self.assertEqual(self.calls(), ["remote policy hooks register", "--version"])
+
+    def test_a_remote_session_says_nothing_if_the_socket_appears_in_time(self) -> None:
+        """The session-start adapter hook races this one on remote workers
+        (ADR-0009). A socket that appears while this script is still waiting
+        is a race won, not an outage."""
+        socket_path = self.stubs.no_socket
+
+        def create_socket() -> None:
+            time.sleep(0.3)
+            listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            listener.bind(str(socket_path))
+            listener.close()
+
+        thread = threading.Thread(target=create_socket)
+        thread.start()
+        try:
+            self.assertEqual(
+                self.shown(
+                    daemon=False,
+                    CLAUDE_CODE_REMOTE="true",
+                    STUB_TELEMETRY="off",
+                    STACKTRACE_ADAPTER_TIMEOUT="2",
+                ),
+                [],
+            )
+        finally:
+            thread.join()
+
+    def test_a_remote_session_reports_the_daemon_once_recovery_times_out(self) -> None:
+        """If the socket never appears, waiting out the adapter's own
+        timeout still ends in the same notice a laptop gets immediately."""
+        self.assertEqual(
+            self.shown(
+                daemon=False,
+                CLAUDE_CODE_REMOTE="true",
+                STUB_TELEMETRY="off",
+                STACKTRACE_ADAPTER_TIMEOUT="1",
+            ),
+            [
+                "The Stacktrace daemon is not reachable. Run /stacktrace:status for "
+                "lifecycle guidance."
+            ],
+        )
+
+    def test_a_remote_session_still_reports_a_cli_below_the_floor(self) -> None:
+        self.assertEqual(
+            self.shown(
+                daemon=False,
+                CLAUDE_CODE_REMOTE="true",
+                STUB_TELEMETRY="off",
+                STUB_VERSION="stacktrace 0.5.1 (openaca 0.7.0)",
+            ),
+            [
+                "The plugin needs stacktrace 0.5.2 or newer; `stacktrace` on PATH is "
+                "stacktrace 0.5.1 (openaca 0.7.0). Run /stacktrace:status for upgrade guidance."
+            ],
+        )
 
     def test_a_cli_below_the_floor_is_the_likelier_cause_of_no_daemon(self) -> None:
         """0.5.2 is the first release with the host-owned lifecycle contract.
@@ -510,9 +574,23 @@ class LifecycleWorkflowTests(unittest.TestCase):
             self.assertIn(rule, rules)
             self.assertIn(rule, checks)
 
+    def test_user_workflows_resolve_the_same_cli_as_the_hooks(self) -> None:
+        """Status and findings run as separate Bash tool calls, which do not
+        share an exported PATH, so each must resolve the per-user CLI the
+        same way session_start.sh does rather than trust a bare `stacktrace`
+        that a stale system copy ahead on PATH would resolve differently."""
+        condition = (
+            'if [ -n "${VIRTUAL_ENV:-}" ] && [ -x "$VIRTUAL_ENV/bin/stacktrace" ]; then'
+        )
+        session_start = (ROOT / "scripts" / "session_start.sh").read_text(encoding="utf-8")
+        self.assertIn(condition, session_start)
+        for skill in ("status", "findings"):
+            document = (ROOT / "skills" / skill / "SKILL.md").read_text(encoding="utf-8")
+            self.assertIn(condition, document)
+
     def test_plugin_docs_require_the_released_lifecycle(self) -> None:
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
-        instructions = (ROOT / "CLAUDE.md").read_text(encoding="utf-8")
+        instructions = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
 
         for document in (readme, instructions):
             self.assertIn("0.5.2", document)
@@ -614,3 +692,177 @@ class WelcomeScreenTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PolicyHookContractTests(unittest.TestCase):
+    def test_admission_is_synchronous_and_host_continues_on_launch_failures(self):
+        document = json.loads((ROOT / "hooks" / "hooks.json").read_text())
+        for event in ("PreToolUse", "UserPromptExpansion"):
+            handler = document["hooks"][event][0]["hooks"][0]
+            self.assertNotIn("async", handler)
+            self.assertEqual(handler["onFailure"], "continue")
+            self.assertLessEqual(handler["timeout"], 5)
+            self.assertEqual(handler["command"], 'sh "${CLAUDE_PLUGIN_ROOT}/scripts/policy_hook.sh" admit 2>/dev/null || true')
+
+    def test_session_start_has_one_guarded_entrypoint(self):
+        document = json.loads((ROOT / "hooks/hooks.json").read_text())
+        handlers = document["hooks"]["SessionStart"][0]["hooks"]
+        self.assertEqual(len(handlers), 1)
+        self.assertEqual(handlers[0]["onFailure"], "continue")
+        self.assertEqual(handlers[0]["command"], 'sh "${CLAUDE_PLUGIN_ROOT}/scripts/session_start.sh" 2>/dev/null || true')
+
+    def test_session_adapter_receives_native_input_and_cannot_corrupt_guidance(self):
+        for code in (0, 1, 2, 127):
+            with self.subTest(code=code), tempfile.TemporaryDirectory() as home:
+                stubs = Stubs()
+                try:
+                    native = '{"hook_event_name":"SessionStart","cwd":"/project"}'
+                    capture = Path(home) / "input"
+                    (stubs.cli / "stacktrace").write_text(
+                        '#!/bin/sh\ncase "$*" in\n'
+                        '"remote policy hooks register") '
+                        f'IFS= read -r line; printf "%s" "$line" > "{capture}"; '
+                        f'printf broken-output; echo secret-error >&2; exit {code} ;;\n'
+                        'telemetry) echo off ;;\nesac\n'
+                    )
+                    result = subprocess.run(
+                        ["sh", str(ROOT / "scripts/session_start.sh")],
+                        input=native + "\n", text=True, capture_output=True,
+                        env=isolated(home, stubs), check=False,
+                    )
+                    self.assertEqual(result.returncode, 0)
+                    self.assertEqual(result.stderr, "")
+                    self.assertEqual(capture.read_text(), native)
+                    self.assertIn("hookSpecificOutput", json.loads(result.stdout))
+                    self.assertNotIn("broken-output", result.stdout)
+                finally:
+                    stubs.cleanup()
+
+    def test_a_wedged_adapter_cannot_stall_the_notification_contract(self):
+        """A hung `remote policy hooks register` call must not consume
+        the hook's own 15s timeout: that would discard this script's entire
+        output, including the notification contract, to a real session."""
+        with tempfile.TemporaryDirectory() as home:
+            stubs = Stubs()
+            try:
+                (stubs.cli / "stacktrace").write_text(
+                    '#!/bin/sh\ncase "$*" in\n'
+                    '"remote policy hooks register") sleep 30 ;;\n'
+                    "telemetry) echo off ;;\nesac\n"
+                )
+                start = time.monotonic()
+                result = subprocess.run(
+                    ["sh", str(ROOT / "scripts/session_start.sh")],
+                    input="{}", text=True, capture_output=True,
+                    env=isolated(home, stubs, STACKTRACE_ADAPTER_CALL_TIMEOUT="1"),
+                    check=False,
+                )
+                elapsed = time.monotonic() - start
+            finally:
+                stubs.cleanup()
+            self.assertLess(elapsed, 5)
+            self.assertEqual(result.returncode, 0)
+            self.assertIn("hookSpecificOutput", json.loads(result.stdout))
+
+    def test_all_plugin_entrypoints_find_the_per_user_cli_outside_path(self):
+        with tempfile.TemporaryDirectory() as home:
+            stubs = Stubs()
+            try:
+                local = Path(home) / ".local/bin"
+                local.mkdir(parents=True)
+                shutil.copy2(stubs.cli / "stacktrace", local / "stacktrace")
+                log = Path(home) / "calls"
+                environment = isolated(home, stubs, cli=False, STUB_LOG=str(log), STUB_TELEMETRY="off")
+                for script, arguments in (("session_start.sh", []), ("policy_hook.sh", ["admit"]), ("subscribe.sh", [])):
+                    result = subprocess.run(
+                        ["sh", str(ROOT / "scripts" / script), *arguments],
+                        input='{"hook_event_name":"SessionStart"}', text=True,
+                        capture_output=True, env=environment, check=False,
+                    )
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                calls = log.read_text().splitlines()
+                self.assertIn("remote policy hooks register", calls)
+                self.assertIn("remote policy hooks admit", calls)
+                self.assertIn("daemon subscribe --agent-kind claude-code", calls)
+            finally:
+                stubs.cleanup()
+
+    def test_default_user_install_wins_over_a_stale_path_copy_unless_a_venv_is_active(self):
+        for virtualenv in ("", "active", "active_reordered", "active_missing_path", "unrelated"):
+            with self.subTest(virtualenv=virtualenv), tempfile.TemporaryDirectory() as home:
+                stubs = Stubs()
+                try:
+                    local = Path(home) / ".local/bin"
+                    local.mkdir(parents=True)
+                    cli = local / "stacktrace"
+                    cli.write_text('#!/bin/sh\nprintf user-cli\n')
+                    cli.chmod(0o755)
+                    environment = isolated(home, stubs, VIRTUAL_ENV=virtualenv)
+                    if virtualenv.startswith("active"):
+                        venv = Path(home) / "venv"
+                        venv.mkdir()
+                        (venv / "bin").symlink_to(stubs.cli, target_is_directory=True)
+                        environment.update(VIRTUAL_ENV=str(venv), PATH=str(venv / "bin") + os.pathsep + str(stubs.tools))
+                        if virtualenv == "active_reordered":
+                            environment["PATH"] = str(local) + os.pathsep + environment["PATH"]
+                        elif virtualenv == "active_missing_path":
+                            environment["PATH"] = str(stubs.tools)
+                    result = subprocess.run(
+                        ["sh", str(ROOT / "scripts/policy_hook.sh"), "admit"],
+                        input='{}', text=True, capture_output=True, env=environment, check=False,
+                    )
+                    self.assertEqual(result.returncode, 0)
+                    self.assertEqual(result.stdout, "" if virtualenv.startswith("active") else "user-cli\n")
+                finally:
+                    stubs.cleanup()
+
+    def test_native_matching_covers_mcp_skill_and_plugin_agent_paths(self):
+        document = json.loads((ROOT / "hooks" / "hooks.json").read_text())
+        matcher = re.compile(document["hooks"]["PreToolUse"][0]["matcher"])
+        for tool in ("mcp__github__read", "Skill", "Agent", "Task"):
+            self.assertIsNotNone(matcher.fullmatch(tool))
+        for tool in ("Bash", "Read", "Write"):
+            self.assertIsNone(matcher.fullmatch(tool))
+
+
+class PolicyAdapterExitTests(unittest.TestCase):
+    def run_adapter(self, body, *arguments):
+        with tempfile.TemporaryDirectory() as directory:
+            binary = Path(directory) / "stacktrace"
+            binary.write_text("#!/bin/sh\n" + body)
+            binary.chmod(0o755)
+            return subprocess.run(
+                ["/bin/sh", str(ROOT / "scripts" / "policy_hook.sh"), *arguments],
+                input='{"hook_event_name":"PreToolUse"}', text=True, capture_output=True,
+                env={"PATH": directory}, check=False,
+            )
+    def test_unknown_cli_commands_and_other_failures_emit_no_verdict(self):
+        for code in (1, 2, 127, 130):
+            with self.subTest(code=code):
+                result = self.run_adapter(
+                    'printf \'{"decision":"block","reason":"partial output"}\'\n'
+                    f"echo incompatible CLI >&2\nexit {code}\n", "admit")
+                self.assertEqual((result.returncode, result.stdout, result.stderr), (0, "", ""))
+    def test_confirmed_successful_denials_reach_claude(self):
+        verdict = '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny"}}'
+        result = self.run_adapter("printf '%s' '" + verdict + "'\n", "admit")
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(json.loads(result.stdout), json.loads(verdict))
+    def test_missing_cli_emits_no_verdict(self):
+        with tempfile.TemporaryDirectory() as directory:
+            result = subprocess.run(
+                ["/bin/sh", str(ROOT / "scripts" / "policy_hook.sh"), "admit"],
+                input='{}', text=True, capture_output=True,
+                env={"PATH": directory}, check=False,
+            )
+            self.assertEqual((result.returncode, result.stdout, result.stderr), (0, "", ""))
+    def test_missing_plugin_script_cannot_leak_a_shell_exit_two(self):
+        manifest = json.loads((ROOT / "hooks/hooks.json").read_text())
+        for event, index in (("PreToolUse", 0), ("UserPromptExpansion", 0), ("SessionStart", 0)):
+            command = manifest["hooks"][event][0]["hooks"][index]["command"]
+            with self.subTest(event=event), tempfile.TemporaryDirectory() as directory:
+                result = subprocess.run(
+                    ["/bin/sh", "-c", command], input='{}', text=True, capture_output=True,
+                    env={"PATH": "/bin", "CLAUDE_PLUGIN_ROOT": directory}, check=False,
+                )
+                self.assertEqual((result.returncode, result.stdout, result.stderr), (0, "", ""))

@@ -19,9 +19,9 @@ after a check below establishes its condition.
   correct `PATH` instead of installing a second copy. Then rerun
   `/stacktrace:status`.
 - **Upgrade the resolved CLI**. Use `uv tool upgrade stacktrace-cli` only when
-  the installation resolved by `command -v stacktrace` is the uv-managed tool.
-  Otherwise correct `PATH` or upgrade the resolved installation directly. Then
-  rerun `/stacktrace:status`.
+  the installation resolved in check 1 is the uv-managed tool. Otherwise
+  correct `PATH` or upgrade the resolved installation directly. Then rerun
+  `/stacktrace:status`.
 - **Start or recover the daemon**. A detached installation runs
   `stacktrace daemon start`; a host-managed installation recovers its service
   running `stacktrace daemon run`. Name both paths without running either.
@@ -35,7 +35,14 @@ after a check below establishes its condition.
 Check in this order. Stop at the first failure, report it with its fix, and
 say which checks did not run.
 
-1. **CLI on PATH.** `command -v stacktrace`, then `stacktrace --version`.
+1. **CLI on PATH.** Resolve the CLI first. Prefer `~/.local/bin/stacktrace`
+   over an older `PATH` copy. Keep an active virtual environment's own copy.
+   Run:
+   ```sh
+   if [ -n "${VIRTUAL_ENV:-}" ] && [ -x "$VIRTUAL_ENV/bin/stacktrace" ]; then echo "$VIRTUAL_ENV/bin/stacktrace"; elif [ -x "$HOME/.local/bin/stacktrace" ]; then echo "$HOME/.local/bin/stacktrace"; else command -v stacktrace; fi
+   ```
+   Use that result in place of `stacktrace` in every command below, including
+   `--version`.
    - Absent: apply **Install or find the CLI**, then stop. Daemon state is not
      known yet.
    - Older than 0.5.2: apply **Upgrade the resolved CLI**, then stop. 0.5.2 is
@@ -56,8 +63,9 @@ say which checks did not run.
      apply **Restart onto the installed version**.
    - If `version:` is newer, the running daemon is ahead of the resolved CLI
      (a rollback, or `PATH` resolving an older install). Say so and name the
-     fix by applying **Upgrade the resolved CLI**, so `command -v stacktrace`
-     is no older than the running daemon. Do not suggest restarting the daemon.
+     fix by applying **Upgrade the resolved CLI**, so the resolved
+     installation is no older than the running daemon. Do not suggest
+     restarting the daemon.
    - If neither is newer but the rows are not identical, they are different
      builds of the same release (differing build metadata). Say so and apply
      **Restart onto the installed version**.

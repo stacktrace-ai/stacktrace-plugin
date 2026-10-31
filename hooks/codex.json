@@ -1,0 +1,27 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"${PLUGIN_ROOT}/scripts/policy_hook.sh\" register --agent-kind codex",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "^mcp__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"${PLUGIN_ROOT}/scripts/policy_hook.sh\" admit --agent-kind codex",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}
