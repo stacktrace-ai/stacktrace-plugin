@@ -61,6 +61,25 @@ def main() -> int:
     if load_json("hooks/cursor.json") != {"version": 1, "hooks": expected_cursor}:
         fail("Cursor hooks must delegate registration and MCP admission through the failure wrapper")
 
+    # Devin installs the `devin` folder (ADR-0012). Its manifest has no hooks
+    # field: Devin reads `hooks.json` at the plugin root. The folder carries its
+    # own copy of the failure wrapper, so it works when Devin stages it alone.
+    if load_json("devin/.devin-plugin/plugin.json") != {"name": "stacktrace", "version": manifest.get("version"), "description": "Hook-visible MCP policy admission through the installed Stacktrace CLI."}:
+        fail("Devin must name the plugin and mirror the shared release version")
+    expected_devin = {}
+    for event, matcher, command, timeout in (("SessionStart", "", "register", 15), ("PreToolUse", "^(mcp__.+|mcp_call_tool)$", "admit", 5)):
+        expected_devin[event] = [{"matcher": matcher, "hooks": [{"type": "command", "command": f'sh "${{PLUGIN_ROOT}}/scripts/policy_hook.sh" {command} --agent-kind devin', "timeout": timeout}]}]
+    if load_json("devin/hooks.json") != expected_devin:
+        fail("Devin hooks must delegate registration and MCP admission through the failure wrapper")
+    devin_wrapper = ROOT / "devin" / "scripts" / "policy_hook.sh"
+    if not devin_wrapper.is_file() or devin_wrapper.read_bytes() != (ROOT / "scripts" / "policy_hook.sh").read_bytes():
+        fail("devin/scripts/policy_hook.sh must be an exact copy of scripts/policy_hook.sh")
+    # Devin loads an AGENTS.md, rules/ and skills/ in the plugin root into every
+    # session, so nothing else may join the folder.
+    devin_files = sorted(str(path.relative_to(ROOT / "devin")) for path in (ROOT / "devin").rglob("*") if path.is_file())
+    if devin_files != [".devin-plugin/plugin.json", "hooks.json", "scripts/policy_hook.sh"]:
+        fail(f"the Devin folder must hold only its manifest, hooks and wrapper, found {devin_files}")
+
     version = manifest.get("version")
     semver_number = r"(?:0|[1-9][0-9]*)"
     if not isinstance(version, str) or not re.fullmatch(

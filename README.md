@@ -320,3 +320,50 @@ Its local-inference build runs the native tests with no account.
 The stacktrace repository holds the conformance test, and stacktrace-demo holds the end-to-end suite.
 The Cursor manifest mirrors the shared version in `.claude-plugin/plugin.json`.
 The desktop app and Cursor's public marketplace are not yet tested.
+
+## Devin policy hooks
+
+The Devin adapter covers MCP tool use.
+It calls the same user daemon as Claude, Codex and Cursor.
+It adds no notification monitor and no skill, sub-agent or built-in tool admission.
+Fleet's MCP default decides each Devin MCP call, because OpenACA collects no Devin policy evidence yet.
+The hooks run only in local Devin sessions: the CLI and Devin Desktop.
+Devin registers plugin hooks only there, so cloud Devin sessions get no Fleet decision.
+A managed manifest that requires this plugin does not enforce Fleet policy in cloud sessions.
+
+The Devin plugin is the `devin` folder (ADR-0012).
+Devin reads `devin/.devin-plugin/plugin.json` and `devin/hooks.json`.
+The folder holds its own copy of `scripts/policy_hook.sh`.
+The validator rejects a copy that differs, and any other file in the folder.
+Devin loads an `AGENTS.md`, `rules/` and `skills/` from a plugin root into every session.
+
+Devin plugin installs need a Devin sign-in.
+`devin plugins install` has no ref option, so install a release tag from a checkout:
+
+```sh
+git clone --branch v<release> https://github.com/stacktrace-ai/stacktrace-plugin.git
+devin plugins install --local ./stacktrace-plugin/devin
+```
+
+An organization can require the plugin for its members at a release tag.
+Add this entry to `requiredPlugins` in its managed manifest:
+
+```json
+{"source": "git-subdir", "url": "https://github.com/stacktrace-ai/stacktrace-plugin.git", "path": "devin", "ref": "v<release>"}
+```
+
+Start a new session after the install.
+Type `/hooks` to see the two Stacktrace hooks.
+
+The `SessionStart` hook registers the project.
+The `PreToolUse` hook asks the daemon for a decision on `mcp__<server>__<tool>` and `mcp_call_tool`.
+Both hooks run the wrapper through `${PLUGIN_ROOT}`.
+Devin sets `PLUGIN_ROOT` for plugin hooks from Devin CLI 3000.11.92.
+The wrapper prints nothing when the CLI fails, so Devin's own permissions decide.
+The hooks do not set `fail_closed`.
+Devin calls plugin hooks best effort, so a hook that does not load adds no block.
+
+The CLI needs `--agent-kind devin`.
+Check the project with `stacktrace remote policy hooks status --agent-kind devin`.
+The stacktrace repository holds the adapter and its conformance test.
+No signed-in Devin session has run this plugin.
