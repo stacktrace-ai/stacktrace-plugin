@@ -354,7 +354,8 @@ Type `/hooks` to see the two Stacktrace hooks.
 
 The `SessionStart` hook registers the project.
 The `PreToolUse` hook asks the daemon for a decision on `mcp__<server>__<tool>` and `mcp_call_tool`.
-Both hooks run the wrapper through `${DEVIN_PLUGIN_ROOT}`.
+Both hooks run the wrapper through `${PLUGIN_ROOT}`.
+Devin sets `PLUGIN_ROOT` for plugin hooks from Devin CLI 3000.11.92.
 The wrapper prints nothing when the CLI fails, so Devin's own permissions decide.
 The hooks do not set `fail_closed`.
 Devin calls plugin hooks best effort, so a hook that does not load adds no block.

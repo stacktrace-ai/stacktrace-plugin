@@ -5,7 +5,7 @@
       "hooks": [
         {
           "type": "command",
-          "command": "sh \"${DEVIN_PLUGIN_ROOT}/scripts/policy_hook.sh\" register --agent-kind devin",
+          "command": "sh \"${PLUGIN_ROOT}/scripts/policy_hook.sh\" register --agent-kind devin",
           "timeout": 15
         }
       ]
@@ -17,7 +17,7 @@
       "hooks": [
         {
           "type": "command",
-          "command": "sh \"${DEVIN_PLUGIN_ROOT}/scripts/policy_hook.sh\" admit --agent-kind devin",
+          "command": "sh \"${PLUGIN_ROOT}/scripts/policy_hook.sh\" admit --agent-kind devin",
           "timeout": 5
         }
       ]

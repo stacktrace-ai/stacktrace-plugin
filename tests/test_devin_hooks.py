@@ -47,7 +47,7 @@ class DevinHooksTests(unittest.TestCase):
             binary = root / 'stacktrace'
             binary.write_text("#!/bin/sh\ncat >/dev/null\nprintf '%s\\n' \"$*\" >\"$HOME/args\"\nprintf '%s\\n' '{\"decision\":\"block\",\"reason\":\"r\"}'\n")
             binary.chmod(0o700)
-            environment = {**os.environ, 'HOME': str(root), 'PATH': str(root) + os.pathsep + os.environ['PATH'], 'DEVIN_PLUGIN_ROOT': str(PLUGIN)}
+            environment = {**os.environ, 'HOME': str(root), 'PATH': str(root) + os.pathsep + os.environ['PATH'], 'PLUGIN_ROOT': str(PLUGIN)}
             environment.pop('VIRTUAL_ENV', None)
             hooks = json.loads((PLUGIN / 'hooks.json').read_text())
             command = hooks['PreToolUse'][0]['hooks'][0]['command']
@@ -63,7 +63,7 @@ class DevinHooksTests(unittest.TestCase):
             (group,) = hooks[event]
             (handler,) = group['hooks']
             self.assertEqual(handler['type'], 'command')
-            self.assertTrue(handler['command'].startswith('sh "${DEVIN_PLUGIN_ROOT}/scripts/policy_hook.sh" '))
+            self.assertTrue(handler['command'].startswith('sh "${PLUGIN_ROOT}/scripts/policy_hook.sh" '))
             self.assertTrue(handler['command'].endswith(operation + ' --agent-kind devin'))
             self.assertNotIn('fail_closed', handler)
         # Devin matches a matcher as a regex search on tool_name.

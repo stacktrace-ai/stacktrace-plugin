@@ -68,7 +68,7 @@ def main() -> int:
         fail("Devin must name the plugin and mirror the shared release version")
     expected_devin = {}
     for event, matcher, command, timeout in (("SessionStart", "", "register", 15), ("PreToolUse", "^(mcp__.+|mcp_call_tool)$", "admit", 5)):
-        expected_devin[event] = [{"matcher": matcher, "hooks": [{"type": "command", "command": f'sh "${{DEVIN_PLUGIN_ROOT}}/scripts/policy_hook.sh" {command} --agent-kind devin', "timeout": timeout}]}]
+        expected_devin[event] = [{"matcher": matcher, "hooks": [{"type": "command", "command": f'sh "${{PLUGIN_ROOT}}/scripts/policy_hook.sh" {command} --agent-kind devin', "timeout": timeout}]}]
     if load_json("devin/hooks.json") != expected_devin:
         fail("Devin hooks must delegate registration and MCP admission through the failure wrapper")
     devin_wrapper = ROOT / "devin" / "scripts" / "policy_hook.sh"
