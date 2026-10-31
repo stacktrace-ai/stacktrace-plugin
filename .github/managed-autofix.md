@@ -16,6 +16,7 @@ per-head Codex review marker.
 | Prompt source | SHA-256 of the fenced block below: `29086252d0958bd5ef9e89986257bf456b3d322c3dbb4675bc1bea430bc61aec`; saved on the routine 2026-10-18T19:53:11Z, read back byte-identical (2026-10-18: reads `.claude/CLAUDE.md`, and a merge conflict authorizes a rebase). Previous block `e7daa95c01961faee72d16c67d466223536d78552c4a8dd22c59a798832b46d3` saved 2026-09-23 and again 2026-10-06T00:56:55Z to skip PRs authored by michealbenedict, read back byte-identical |
 | Codex review | Codex reviews this repository's PRs (observed on #13, #17); confirm all-PRs/every-push in the Codex console |
 | Legacy Actions loop | none; this repository never had review/fix Actions workflows |
+| Conflict wake | GitHub sends no event when a PR becomes conflicted, so a watcher does not wake when only the base branch moves. `.github/workflows/conflict-wake.yml` comments once per PR head on each open PR that a push leaves conflicted, and that comment wakes the watcher |
 
 Editing this file deploys nothing. Save the block as the routine's prompt, read
 it back, and update the SHA and deployment line.
