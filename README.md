@@ -152,8 +152,8 @@ It also covers the built-in tools that a Stacktrace detection rule can block: `B
 MCP selection uses native server provenance.
 `UserPromptExpansion` covers direct slash-command expansion.
 `UserPromptSubmit` covers a prompt that a person submits.
-A built-in tool decision needs `stacktrace-cli` 0.18.0 or newer, and a prompt decision needs 0.19.0 or newer.
-An older CLI gives no decision, and the call or the prompt continues.
+Built-in tool and prompt decisions need `stacktrace-cli` 0.19.0 or newer.
+An older CLI may give no decision, and then the call or the prompt continues.
 Neither allow nor defer grants a native permission.
 
 Unknown or ambiguous subjects use the known category default.
