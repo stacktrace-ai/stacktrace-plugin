@@ -348,7 +348,7 @@ class PluginContractTests(unittest.TestCase):
         document = json.loads((ROOT / "hooks" / "hooks.json").read_text(encoding="utf-8"))
         matcher = re.compile(document["hooks"]["PreToolUse"][0]["matcher"])
         blockable = (
-            "Bash", "Monitor", "Write", "Edit", "MultiEdit", "NotebookEdit", "WebFetch", "WebSearch",
+            "Bash", "PowerShell", "Monitor", "Write", "Edit", "MultiEdit", "NotebookEdit", "WebFetch", "WebSearch",
             "Skill", "Agent", "Task", "mcp__github__create_issue",
         )
         for tool in blockable:
