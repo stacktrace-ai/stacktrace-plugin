@@ -45,8 +45,11 @@ reports.
   host or user starts the daemon and the session monitor only subscribes.
 - Observation hooks remain non-blocking. The explicit policy adapter is
   synchronous: it passes native stdin only to `stacktrace remote policy hooks
-  admit`, which strips prompts, arguments, responses and transcripts before
-  contacting the daemon. It never evaluates policy or scans in this repo.
+  admit`. For an MCP, skill, plugin-agent or slash-command decision, that CLI
+  strips prompts, arguments, responses and transcripts before it contacts the
+  local daemon. For a built-in tool that a detection rule can block, it sends
+  the call's input to the local daemon. For a submitted prompt, it sends the
+  prompt text (stacktrace ADR-0158). The plugin never evaluates policy or scans.
 - Admission hooks require the CLI release containing `remote policy hooks`
   and Claude Code 2.1.274 or newer. Upgrade the CLI before this plugin.
   Missing/older CLI commands continue without a policy decision. On a compatible
