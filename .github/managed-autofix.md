@@ -13,7 +13,7 @@ per-head Codex review marker.
 | --- | --- |
 | Routine | [trig_01JijKAzDwe3KYKEReBWkdkd](https://claude.ai/code/routines/trig_01JijKAzDwe3KYKEReBWkdkd), Anthropic-hosted Default environment (`env_01F2vbHGYXjLs9PV3hzvbvCX`), claude-sonnet-5, sole source this repository, no connectors |
 | Triggers | GitHub `pull_request.opened` and `pull_request.ready_for_review` (ids `294e66bb-0960-4f7a-9b74-f7b683bbad36` opened (2026-09-18), `11ef5696-f190-45d9-b567-0e7941de2455` ready_for_review (2026-09-23)); a draft PR enrolls when marked ready. Automatic enrollment: verified: PR #17 (opened 2026-09-22) was enrolled and fixed by a cloud session over three Codex rounds under the previous prompt |
-| Prompt source | SHA-256 of the fenced block below: `29086252d0958bd5ef9e89986257bf456b3d322c3dbb4675bc1bea430bc61aec`; saved on the routine 2026-10-18T19:53:11Z, read back byte-identical (2026-10-18: reads `.claude/CLAUDE.md`, and a merge conflict authorizes a rebase). Previous block `e7daa95c01961faee72d16c67d466223536d78552c4a8dd22c59a798832b46d3` saved 2026-09-23 and again 2026-10-06T00:56:55Z to skip PRs authored by michealbenedict, read back byte-identical |
+| Prompt source | SHA-256 of the fenced block below: `1b6b709f67588afe9755ff0f51a7eab144d3e8f35d957b1c32d3be454e70a9c2`; saved on the routine 2026-10-18T19:53:11Z, read back byte-identical (2026-10-18: reads `.claude/CLAUDE.md`, and a merge conflict authorizes a rebase). Previous block `e7daa95c01961faee72d16c67d466223536d78552c4a8dd22c59a798832b46d3` saved 2026-09-23 and again 2026-10-06T00:56:55Z to skip PRs authored by michealbenedict, read back byte-identical; saved again 2026-11-01T00:31:55Z so that only Codex's own summary or review of the current head counts as a review, read back |
 | Codex review | Codex reviews this repository's PRs (observed on #13, #17); confirm all-PRs/every-push in the Codex console |
 | Legacy Actions loop | none; this repository never had review/fix Actions workflows |
 | Conflict wake | GitHub sends no event when a PR becomes conflicted, so a watcher does not wake when only the base branch moves. `.github/workflows/conflict-wake.yml` comments once per PR head on each open PR that a push leaves conflicted, and that comment wakes the watcher |
@@ -64,12 +64,17 @@ checks, and infrastructure failures do not authorize edits. If the head
 changes, re-evaluate authorization for the new head. Otherwise remain
 subscribed and wait.
 
-At enrollment and after every push, ensure the current head has one Codex
-review queued, running, or completed. Accept an existing request marker only
-when its real author is this session's GitHub identity or a trusted maintainer.
-If neither a review nor a trusted marker exists, post one `@codex review`
-request with <!-- managed-codex-review:FULL_HEAD_SHA -->. Do not duplicate a
-trusted request for the same SHA or use a bot @-mention in other prose.
+At enrollment and after every push to the PR branch, by anyone, make sure
+Codex reviews the current head. Codex has the head only when its summary
+comment names that head's full SHA as running or completed, or it posted a
+review of that head. Nothing else shows a review: not a commit status, a check
+run or a workflow run, even one named for Codex or one that is pending, and
+not a review of an earlier head. Accept an existing request marker for the
+head only when its real author is this session's GitHub identity or a trusted
+maintainer. If Codex does not have the head and no trusted marker exists, post
+one `@codex review` request with <!-- managed-codex-review:FULL_HEAD_SHA -->.
+Do not duplicate a trusted request for the same SHA or use a bot @-mention in
+other prose.
 
 Use GitHub activity and this session's history to avoid handling the same
 review or check twice. The per-head Codex review marker is the only machine-state
