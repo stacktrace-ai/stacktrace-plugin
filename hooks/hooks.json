@@ -1,5 +1,5 @@
 {
-  "description": "Teach notification delivery and request synchronous hook-visible policy admission.",
+  "description": "Teach notification delivery and request synchronous hook-visible policy admission for tools and prompts.",
   "hooks": {
     "SessionStart": [
       {
@@ -23,10 +23,22 @@
             "onFailure": "continue"
           }
         ],
-        "matcher": "^(mcp__.*|Skill|Agent|Task)$"
+        "matcher": "^(mcp__.*|Skill|Agent|Task|Bash|Monitor|Write|Edit|MultiEdit|NotebookEdit|WebFetch|WebSearch)$"
       }
     ],
     "UserPromptExpansion": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/scripts/policy_hook.sh\" admit 2>/dev/null || true",
+            "timeout": 5,
+            "onFailure": "continue"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
       {
         "hooks": [
           {
