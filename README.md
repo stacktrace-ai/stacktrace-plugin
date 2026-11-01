@@ -149,8 +149,12 @@ stacktrace remote policy hooks status
 
 Start a new Claude session.
 The synchronous `PreToolUse` hook covers MCP tools, Skill calls and namespaced plugin-agent calls.
+It also covers the built-in tools that a Stacktrace detection rule can block: `Bash`, `PowerShell`, `Monitor`, `Write`, `Edit`, `MultiEdit`, `NotebookEdit`, `WebFetch` and `WebSearch`.
 MCP selection uses native server provenance.
 `UserPromptExpansion` covers direct slash-command expansion.
+`UserPromptSubmit` covers a prompt that a person submits.
+Built-in tool and prompt decisions need `stacktrace-cli` 0.19.0 or newer.
+An older CLI may give no decision, and then the call or the prompt continues.
 Neither allow nor defer grants a native permission.
 
 Unknown or ambiguous subjects use the known category default.

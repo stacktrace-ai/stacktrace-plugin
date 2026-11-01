@@ -150,8 +150,8 @@ def main() -> int:
         fail("plugin must declare exactly one direct Stacktrace session monitor")
 
     configured = hooks.get("hooks") if isinstance(hooks, dict) else None
-    if not isinstance(configured, dict) or set(configured) != {"SessionStart", "PreToolUse", "UserPromptExpansion"}:
-        fail("hooks must contain SessionStart guidance and both synchronous admission events")
+    if not isinstance(configured, dict) or set(configured) != {"SessionStart", "PreToolUse", "UserPromptExpansion", "UserPromptSubmit"}:
+        fail("hooks must contain SessionStart guidance and the three synchronous admission events")
     expected_start = {"hooks": [{
         "type": "command",
         "command": 'sh "${CLAUDE_PLUGIN_ROOT}/scripts/session_start.sh" 2>/dev/null || true',
@@ -161,7 +161,7 @@ def main() -> int:
     if configured["SessionStart"] != [expected_start]:
         fail("SessionStart must teach notifications and delegate registration to the CLI")
 
-    for event in ("PreToolUse", "UserPromptExpansion"):
+    for event in ("PreToolUse", "UserPromptExpansion", "UserPromptSubmit"):
         expected_group = {
             "hooks": [{
                 "type": "command",
@@ -171,7 +171,9 @@ def main() -> int:
             }],
         }
         if event == "PreToolUse":
-            expected_group["matcher"] = "^(mcp__.*|Skill|Agent|Task)$"
+            expected_group["matcher"] = (
+                "^(mcp__.*|Skill|Agent|Task|Bash|PowerShell|Monitor|Write|Edit|MultiEdit|NotebookEdit|WebFetch|WebSearch)$"
+            )
         if configured[event] != [expected_group]:
             fail(f"{event} must use bounded synchronous admission that continues on failure")
 

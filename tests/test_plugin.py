@@ -335,7 +335,38 @@ class PluginContractTests(unittest.TestCase):
 
     def test_plugin_has_no_turn_or_session_end_detection_hook(self) -> None:
         document = json.loads((ROOT / "hooks" / "hooks.json").read_text(encoding="utf-8"))
-        self.assertEqual(set(document["hooks"]), {"SessionStart", "PreToolUse", "UserPromptExpansion"})
+        self.assertEqual(
+            set(document["hooks"]),
+            {"SessionStart", "PreToolUse", "UserPromptExpansion", "UserPromptSubmit"},
+        )
+
+    def test_admission_reaches_every_tool_a_stacktrace_rule_can_block(self) -> None:
+        # The built-in tools whose class a blockable Stacktrace rule reads:
+        # `shell`, `file_write`, `file_edit`, `web_fetch` and `web_search`
+        # (stacktrace `hooks/claude.py`, `INSPECTED_CLASSES`, ADR-0158). The CLI
+        # decides; the matcher only has to deliver the call.
+        document = json.loads((ROOT / "hooks" / "hooks.json").read_text(encoding="utf-8"))
+        matcher = re.compile(document["hooks"]["PreToolUse"][0]["matcher"])
+        blockable = (
+            "Bash", "PowerShell", "Monitor", "Write", "Edit", "MultiEdit", "NotebookEdit", "WebFetch", "WebSearch",
+            "Skill", "Agent", "Task", "mcp__github__create_issue",
+        )
+        for tool in blockable:
+            self.assertTrue(matcher.fullmatch(tool), tool)
+        # A tool no rule reads pays no hook round trip.
+        for tool in ("Read", "Grep", "Glob", "LS", "TodoWrite", "BashOutput", "KillShell", "NotebookRead"):
+            self.assertFalse(matcher.fullmatch(tool), tool)
+
+    def test_a_submitted_prompt_reaches_admission(self) -> None:
+        # Credentials and personal data in prompts can be set to Block, and the
+        # CLI stops such a prompt at UserPromptSubmit (stacktrace #361).
+        document = json.loads((ROOT / "hooks" / "hooks.json").read_text(encoding="utf-8"))
+        (group,) = document["hooks"]["UserPromptSubmit"]
+        self.assertNotIn("matcher", group)
+        self.assertEqual(
+            group["hooks"][0]["command"],
+            'sh "${CLAUDE_PLUGIN_ROOT}/scripts/policy_hook.sh" admit 2>/dev/null || true',
+        )
 
     def test_monitor_invokes_the_stacktrace_subscription_directly(self) -> None:
         monitors = json.loads(
@@ -821,8 +852,9 @@ class PolicyHookContractTests(unittest.TestCase):
         matcher = re.compile(document["hooks"]["PreToolUse"][0]["matcher"])
         for tool in ("mcp__github__read", "Skill", "Agent", "Task"):
             self.assertIsNotNone(matcher.fullmatch(tool))
-        for tool in ("Bash", "Read", "Write"):
-            self.assertIsNone(matcher.fullmatch(tool))
+        # Bash and Write now reach admission too: a blockable rule reads them
+        # (test_admission_reaches_every_tool_a_stacktrace_rule_can_block).
+        self.assertIsNone(matcher.fullmatch("Read"))
 
 
 class PolicyAdapterExitTests(unittest.TestCase):
