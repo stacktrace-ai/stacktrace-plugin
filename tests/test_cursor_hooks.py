@@ -40,10 +40,9 @@ class CursorHooksTests(unittest.TestCase):
         hooks = json.loads((ROOT / manifest['hooks']).read_text())
         self.assertEqual(hooks['version'], 1)
         self.assertEqual(set(hooks['hooks']), {'sessionStart', 'beforeMCPExecution'})
-        for event, operation, timeout in (('sessionStart', 'register', 15), ('beforeMCPExecution', 'admit', 5)):
+        for event, script, timeout in (('sessionStart', 'session_start.sh', 15), ('beforeMCPExecution', 'policy_hook.sh admit', 5)):
             handler = hooks['hooks'][event][0]
-            self.assertTrue(handler['command'].startswith('sh ./scripts/policy_hook.sh '))
-            self.assertIn(operation + ' --agent-kind cursor', handler['command'])
+            self.assertEqual(handler['command'], 'sh ./scripts/' + script + ' --agent-kind cursor')
             self.assertNotIn('failClosed', handler)
             self.assertEqual(handler['timeout'], timeout)
 

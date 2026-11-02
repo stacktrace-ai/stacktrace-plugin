@@ -39,14 +39,13 @@ def main() -> int:
     if codex != {"name": "stacktrace", "version": manifest.get("version"), "description": "Hook-visible MCP policy admission through the installed Stacktrace CLI.", "hooks": "./hooks/codex.json"}:
         fail("Codex must select its own hooks and mirror the shared release version")
     codex_hooks = load_json("hooks/codex.json")
-    expected_codex = {}
-    for event, command in (("SessionStart", "register"), ("PreToolUse", "admit")):
-        group = {"hooks": [{"type": "command", "command": f'sh "${{PLUGIN_ROOT}}/scripts/policy_hook.sh" {command} --agent-kind codex', "timeout": 5}]}
-        if event == "PreToolUse":
-            group["matcher"] = "^mcp__.*"
-        expected_codex[event] = [group]
+    # Every host's SessionStart runs the one session start script for 15 seconds (ADR-0013).
+    expected_codex = {
+        "SessionStart": [{"hooks": [{"type": "command", "command": 'sh "${PLUGIN_ROOT}/scripts/session_start.sh" --agent-kind codex', "timeout": 15}]}],
+        "PreToolUse": [{"hooks": [{"type": "command", "command": 'sh "${PLUGIN_ROOT}/scripts/policy_hook.sh" admit --agent-kind codex', "timeout": 5}], "matcher": "^mcp__.*"}],
+    }
     if codex_hooks != {"hooks": expected_codex}:
-        fail("Codex hooks must delegate registration and MCP admission through the failure wrapper")
+        fail("Codex hooks must delegate registration to the session start script and MCP admission to the failure wrapper")
     cursor = load_json(".cursor-plugin/plugin.json")
     # Cursor auto-discovers every skills/*/SKILL.md when the field is absent; an
     # explicit empty list keeps Claude-only skills out of the Cursor surface.
@@ -55,30 +54,32 @@ def main() -> int:
     # Cursor runs plugin hooks from the plugin root, and fails open without failClosed.
     # sessionStart gets a longer timeout so registration survives daemon recovery (ADR-0009).
     expected_cursor = {
-        event: [{"command": f"sh ./scripts/policy_hook.sh {command} --agent-kind cursor", "timeout": timeout}]
-        for event, command, timeout in (("sessionStart", "register", 15), ("beforeMCPExecution", "admit", 5))
+        "sessionStart": [{"command": "sh ./scripts/session_start.sh --agent-kind cursor", "timeout": 15}],
+        "beforeMCPExecution": [{"command": "sh ./scripts/policy_hook.sh admit --agent-kind cursor", "timeout": 5}],
     }
     if load_json("hooks/cursor.json") != {"version": 1, "hooks": expected_cursor}:
-        fail("Cursor hooks must delegate registration and MCP admission through the failure wrapper")
+        fail("Cursor hooks must delegate registration to the session start script and MCP admission to the failure wrapper")
 
     # Devin installs the `devin` folder (ADR-0012). Its manifest has no hooks
     # field: Devin reads `hooks.json` at the plugin root. The folder carries its
-    # own copy of the failure wrapper, so it works when Devin stages it alone.
+    # own copies of the two scripts, so it works when Devin stages it alone.
     if load_json("devin/.devin-plugin/plugin.json") != {"name": "stacktrace", "version": manifest.get("version"), "description": "Hook-visible MCP policy admission through the installed Stacktrace CLI."}:
         fail("Devin must name the plugin and mirror the shared release version")
-    expected_devin = {}
-    for event, matcher, command, timeout in (("SessionStart", "", "register", 15), ("PreToolUse", "^(mcp__.+|mcp_call_tool)$", "admit", 5)):
-        expected_devin[event] = [{"matcher": matcher, "hooks": [{"type": "command", "command": f'sh "${{PLUGIN_ROOT}}/scripts/policy_hook.sh" {command} --agent-kind devin', "timeout": timeout}]}]
+    expected_devin = {
+        "SessionStart": [{"matcher": "", "hooks": [{"type": "command", "command": 'sh "${PLUGIN_ROOT}/scripts/session_start.sh" --agent-kind devin', "timeout": 15}]}],
+        "PreToolUse": [{"matcher": "^(mcp__.+|mcp_call_tool)$", "hooks": [{"type": "command", "command": 'sh "${PLUGIN_ROOT}/scripts/policy_hook.sh" admit --agent-kind devin', "timeout": 5}]}],
+    }
     if load_json("devin/hooks.json") != expected_devin:
-        fail("Devin hooks must delegate registration and MCP admission through the failure wrapper")
-    devin_wrapper = ROOT / "devin" / "scripts" / "policy_hook.sh"
-    if not devin_wrapper.is_file() or devin_wrapper.read_bytes() != (ROOT / "scripts" / "policy_hook.sh").read_bytes():
-        fail("devin/scripts/policy_hook.sh must be an exact copy of scripts/policy_hook.sh")
+        fail("Devin hooks must delegate registration to the session start script and MCP admission to the failure wrapper")
+    for script in ("policy_hook.sh", "session_start.sh"):
+        copy = ROOT / "devin" / "scripts" / script
+        if not copy.is_file() or copy.read_bytes() != (ROOT / "scripts" / script).read_bytes():
+            fail(f"devin/scripts/{script} must be an exact copy of scripts/{script}")
     # Devin loads an AGENTS.md, rules/ and skills/ in the plugin root into every
     # session, so nothing else may join the folder.
     devin_files = sorted(str(path.relative_to(ROOT / "devin")) for path in (ROOT / "devin").rglob("*") if path.is_file())
-    if devin_files != [".devin-plugin/plugin.json", "hooks.json", "scripts/policy_hook.sh"]:
-        fail(f"the Devin folder must hold only its manifest, hooks and wrapper, found {devin_files}")
+    if devin_files != [".devin-plugin/plugin.json", "hooks.json", "scripts/policy_hook.sh", "scripts/session_start.sh"]:
+        fail(f"the Devin folder must hold only its manifest, hooks and two scripts, found {devin_files}")
 
     version = manifest.get("version")
     semver_number = r"(?:0|[1-9][0-9]*)"
@@ -154,7 +155,7 @@ def main() -> int:
         fail("hooks must contain SessionStart guidance and the three synchronous admission events")
     expected_start = {"hooks": [{
         "type": "command",
-        "command": 'sh "${CLAUDE_PLUGIN_ROOT}/scripts/session_start.sh" 2>/dev/null || true',
+        "command": 'sh "${CLAUDE_PLUGIN_ROOT}/scripts/session_start.sh" --agent-kind claude-code 2>/dev/null || true',
         "timeout": 15,
         "onFailure": "continue",
     }]}

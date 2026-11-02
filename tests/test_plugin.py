@@ -31,7 +31,7 @@ exit 0
 """
 
 #: Every external command the hook runs.
-TOOLS = ("sh", "awk", "mkdir", "dirname", "sed", "tr", "id", "sleep")
+TOOLS = ("sh", "awk", "mkdir", "dirname", "sed", "tr", "id", "sleep", "date", "wc", "tail", "mv", "rm")
 
 
 class Stubs:
@@ -92,6 +92,7 @@ def isolated(home: str, stubs: Stubs, *, cli: bool = True, daemon: bool = True, 
         "STUB_TELEMETRY",
         "STACKTRACE_ADAPTER_TIMEOUT",
         "STACKTRACE_ADAPTER_CALL_TIMEOUT",
+        "STACKTRACE_STATE_DIR",
     ):
         environment.pop(name, None)
     environment["STACKTRACE_ADAPTER_TIMEOUT"] = "0"
@@ -101,7 +102,7 @@ def isolated(home: str, stubs: Stubs, *, cli: bool = True, daemon: bool = True, 
 
 def session_start(environment: dict[str, str]) -> dict[str, object]:
     result = subprocess.run(
-        ["sh", str(ROOT / "scripts" / "session_start.sh")],
+        ["sh", str(ROOT / "scripts" / "session_start.sh"), "--agent-kind", "claude-code"],
         check=True,
         capture_output=True,
         text=True,
@@ -183,7 +184,7 @@ class PluginContractTests(unittest.TestCase):
         test that used the real one would silently consume the developer's own
         first-run welcome."""
         return subprocess.run(
-            ["sh", str(ROOT / "scripts" / "session_start.sh")],
+            ["sh", str(ROOT / "scripts" / "session_start.sh"), "--agent-kind", "claude-code"],
             check=True,
             capture_output=True,
             text=True,
@@ -237,7 +238,7 @@ class PluginContractTests(unittest.TestCase):
             def start() -> dict[str, object]:
                 return json.loads(
                     subprocess.run(
-                        ["sh", str(ROOT / "scripts" / "session_start.sh")],
+                        ["sh", str(ROOT / "scripts" / "session_start.sh"), "--agent-kind", "claude-code"],
                         check=True,
                         capture_output=True,
                         text=True,
@@ -272,7 +273,7 @@ class PluginContractTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as home:
             before = json.loads(
                 subprocess.run(
-                    ["sh", str(ROOT / "scripts" / "session_start.sh")],
+                    ["sh", str(ROOT / "scripts" / "session_start.sh"), "--agent-kind", "claude-code"],
                     check=True,
                     capture_output=True,
                     text=True,
@@ -293,7 +294,7 @@ class PluginContractTests(unittest.TestCase):
             environment = self._environment(home)
             environment["NO_COLOR"] = "1"
             result = subprocess.run(
-                ["sh", str(ROOT / "scripts" / "session_start.sh")],
+                ["sh", str(ROOT / "scripts" / "session_start.sh"), "--agent-kind", "claude-code"],
                 check=True,
                 capture_output=True,
                 text=True,
@@ -321,7 +322,7 @@ class PluginContractTests(unittest.TestCase):
             environment = self._environment(home)
             environment["CLAUDE_CONFIG_DIR"] = str(blocker / "claude")
             result = subprocess.run(
-                ["sh", str(ROOT / "scripts" / "session_start.sh")],
+                ["sh", str(ROOT / "scripts" / "session_start.sh"), "--agent-kind", "claude-code"],
                 check=True,
                 capture_output=True,
                 text=True,
@@ -405,7 +406,7 @@ class DiagnosisTests(unittest.TestCase):
         """The CLI check is `command -v` and the daemon check a socket test,
         so a working machine adds no diagnostic CLI call."""
         self.assertEqual(self.shown(), [])
-        self.assertEqual(self.calls(), ["remote policy hooks register"])
+        self.assertEqual(self.calls(), ["remote policy hooks register --agent-kind claude-code"])
 
     def test_a_missing_cli_routes_to_status(self) -> None:
         self.assertEqual(
@@ -424,7 +425,7 @@ class DiagnosisTests(unittest.TestCase):
                 "lifecycle guidance."
             ],
         )
-        self.assertEqual(self.calls(), ["remote policy hooks register", "--version"])
+        self.assertEqual(self.calls(), ["remote policy hooks register --agent-kind claude-code", "--version"])
 
     def test_a_remote_session_says_nothing_if_the_socket_appears_in_time(self) -> None:
         """The session-start adapter hook races this one on remote workers
@@ -544,12 +545,16 @@ class DiagnosisTests(unittest.TestCase):
 
     def test_diagnosis_changes_nothing(self) -> None:
         """Stateless: whatever it finds, HOME holds only what the test put
-        there."""
+        there, and the failure log (ADR-0013)."""
         before = sorted(str(q) for q in Path(self.home.name).rglob("*"))
         for options in ({"cli": False}, {"daemon": False}, {"STUB_VERSION": "stacktrace 0.5.1 (x)"}):
             with self.subTest(options=options):
                 self.shown(**options)
-        after = sorted(str(q) for q in Path(self.home.name).rglob("*") if q != self.log)
+        state = Path(self.home.name, ".local")
+        after = sorted(
+            str(q) for q in Path(self.home.name).rglob("*")
+            if q != self.log and q != state and state not in q.parents
+        )
         self.assertEqual(after, before)
 
 
@@ -740,7 +745,7 @@ class PolicyHookContractTests(unittest.TestCase):
         handlers = document["hooks"]["SessionStart"][0]["hooks"]
         self.assertEqual(len(handlers), 1)
         self.assertEqual(handlers[0]["onFailure"], "continue")
-        self.assertEqual(handlers[0]["command"], 'sh "${CLAUDE_PLUGIN_ROOT}/scripts/session_start.sh" 2>/dev/null || true')
+        self.assertEqual(handlers[0]["command"], 'sh "${CLAUDE_PLUGIN_ROOT}/scripts/session_start.sh" --agent-kind claude-code 2>/dev/null || true')
 
     def test_session_adapter_receives_native_input_and_cannot_corrupt_guidance(self):
         for code in (0, 1, 2, 127):
@@ -751,13 +756,13 @@ class PolicyHookContractTests(unittest.TestCase):
                     capture = Path(home) / "input"
                     (stubs.cli / "stacktrace").write_text(
                         '#!/bin/sh\ncase "$*" in\n'
-                        '"remote policy hooks register") '
+                        '"remote policy hooks register --agent-kind claude-code") '
                         f'IFS= read -r line; printf "%s" "$line" > "{capture}"; '
                         f'printf broken-output; echo secret-error >&2; exit {code} ;;\n'
                         'telemetry) echo off ;;\nesac\n'
                     )
                     result = subprocess.run(
-                        ["sh", str(ROOT / "scripts/session_start.sh")],
+                        ["sh", str(ROOT / "scripts/session_start.sh"), "--agent-kind", "claude-code"],
                         input=native + "\n", text=True, capture_output=True,
                         env=isolated(home, stubs), check=False,
                     )
@@ -778,12 +783,12 @@ class PolicyHookContractTests(unittest.TestCase):
             try:
                 (stubs.cli / "stacktrace").write_text(
                     '#!/bin/sh\ncase "$*" in\n'
-                    '"remote policy hooks register") sleep 30 ;;\n'
+                    '"remote policy hooks register --agent-kind claude-code") sleep 30 ;;\n'
                     "telemetry) echo off ;;\nesac\n"
                 )
                 start = time.monotonic()
                 result = subprocess.run(
-                    ["sh", str(ROOT / "scripts/session_start.sh")],
+                    ["sh", str(ROOT / "scripts/session_start.sh"), "--agent-kind", "claude-code"],
                     input="{}", text=True, capture_output=True,
                     env=isolated(home, stubs, STACKTRACE_ADAPTER_CALL_TIMEOUT="1"),
                     check=False,
@@ -804,7 +809,7 @@ class PolicyHookContractTests(unittest.TestCase):
                 shutil.copy2(stubs.cli / "stacktrace", local / "stacktrace")
                 log = Path(home) / "calls"
                 environment = isolated(home, stubs, cli=False, STUB_LOG=str(log), STUB_TELEMETRY="off")
-                for script, arguments in (("session_start.sh", []), ("policy_hook.sh", ["admit"]), ("subscribe.sh", [])):
+                for script, arguments in (("session_start.sh", ["--agent-kind", "claude-code"]), ("policy_hook.sh", ["admit"]), ("subscribe.sh", [])):
                     result = subprocess.run(
                         ["sh", str(ROOT / "scripts" / script), *arguments],
                         input='{"hook_event_name":"SessionStart"}', text=True,
@@ -812,7 +817,7 @@ class PolicyHookContractTests(unittest.TestCase):
                     )
                     self.assertEqual(result.returncode, 0, result.stderr)
                 calls = log.read_text().splitlines()
-                self.assertIn("remote policy hooks register", calls)
+                self.assertIn("remote policy hooks register --agent-kind claude-code", calls)
                 self.assertIn("remote policy hooks admit", calls)
                 self.assertIn("daemon subscribe --agent-kind claude-code", calls)
             finally:

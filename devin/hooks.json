@@ -5,7 +5,7 @@
       "hooks": [
         {
           "type": "command",
-          "command": "sh \"${PLUGIN_ROOT}/scripts/policy_hook.sh\" register --agent-kind devin",
+          "command": "sh \"${PLUGIN_ROOT}/scripts/session_start.sh\" --agent-kind devin",
           "timeout": 15
         }
       ]
