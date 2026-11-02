@@ -31,10 +31,9 @@ class CodexHooksTests(unittest.TestCase):
         manifest = json.loads((ROOT / '.codex-plugin/plugin.json').read_text())
         hooks = json.loads((ROOT / manifest['hooks']).read_text())['hooks']
         self.assertEqual(set(hooks), {'SessionStart', 'PreToolUse'})
-        for event, operation in (('SessionStart', 'register'), ('PreToolUse', 'admit')):
+        for event, script in (('SessionStart', 'session_start.sh"'), ('PreToolUse', 'policy_hook.sh" admit')):
             handler = hooks[event][0]['hooks'][0]
-            self.assertIn('policy_hook.sh', handler['command'])
-            self.assertIn(operation + ' --agent-kind codex', handler['command'])
+            self.assertIn(script + ' --agent-kind codex', handler['command'])
             self.assertNotIn('onFailure', handler)
 
 
