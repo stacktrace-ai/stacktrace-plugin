@@ -148,7 +148,10 @@ stacktrace remote policy hooks status
 
 Start a new Claude session.
 The synchronous `PreToolUse` hook covers MCP tools, Skill calls and namespaced plugin-agent calls.
-It also covers the built-in tools that a Stacktrace detection rule can block: `Bash`, `Monitor`, `Write`, `Edit`, `MultiEdit`, `NotebookEdit`, `WebFetch` and `WebSearch`.
+It also covers the built-in tools that a Stacktrace detection rule can block: `Bash`, `Monitor`, `Read`, `Grep`, `Write`, `Edit`, `MultiEdit`, `NotebookEdit`, `WebFetch` and `WebSearch`.
+`Read` and `Grep` reach the hook so that `stacktrace-secret-path-read` can stop a read of a credential file, such as `.env` or `~/.ssh/id_rsa`, before it runs.
+A CLI without that rule gives them no decision, and the read continues.
+`Glob` is not hooked: it lists paths and reads no file.
 The hook also receives `PowerShell` calls.
 On macOS and Linux, Claude Code runs that tool only when `CLAUDE_CODE_USE_POWERSHELL_TOOL=1` is set and `pwsh` is installed.
 `stacktrace-cli` 0.19.0 does not classify `PowerShell` yet, so it gives such a call no decision, and the call runs.
