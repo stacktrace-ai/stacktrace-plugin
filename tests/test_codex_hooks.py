@@ -30,11 +30,25 @@ class CodexHooksTests(unittest.TestCase):
     def test_codex_manifest_selects_only_its_native_hooks(self):
         manifest = json.loads((ROOT / '.codex-plugin/plugin.json').read_text())
         hooks = json.loads((ROOT / manifest['hooks']).read_text())['hooks']
-        self.assertEqual(set(hooks), {'SessionStart', 'PreToolUse'})
-        for event, script in (('SessionStart', 'session_start.sh"'), ('PreToolUse', 'policy_hook.sh" admit')):
+        self.assertEqual(set(hooks), {'SessionStart', 'PreToolUse', 'UserPromptSubmit'})
+        for event, script in (('SessionStart', 'session_start.sh"'), ('PreToolUse', 'policy_hook.sh" admit'), ('UserPromptSubmit', 'policy_hook.sh" admit')):
             handler = hooks[event][0]['hooks'][0]
             self.assertIn(script + ' --agent-kind codex', handler['command'])
             self.assertNotIn('onFailure', handler)
+
+
+    def test_codex_sends_mcp_calls_and_its_shell_and_no_other_tool(self):
+        """Codex names its shell tool `Bash` at the hook, for `exec_command` and for a
+        patch sent through the shell. A native `apply_patch` call is not sent until its
+        hook input is seen (stacktrace ADR-0216)."""
+        import re
+        manifest = json.loads((ROOT / '.codex-plugin/plugin.json').read_text())
+        hooks = json.loads((ROOT / manifest['hooks']).read_text())['hooks']
+        matcher = re.compile(hooks['PreToolUse'][0]['matcher'])
+        for tool in ('Bash', 'mcp__server__ping', 'mcp__codex_apps__github__fetch_file'):
+            self.assertTrue(matcher.search(tool), tool)
+        for tool in ('apply_patch', 'Edit', 'Write', 'exec_command', 'spawn_agent', 'BashOutput', 'xBash'):
+            self.assertFalse(matcher.search(tool), tool)
 
 
 class CodexVersionTests(unittest.TestCase):
