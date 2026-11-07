@@ -174,7 +174,7 @@ def main() -> int:
         }
         if event == "PreToolUse":
             expected_group["matcher"] = (
-                "^(mcp__.*|Skill|Agent|Task|Bash|PowerShell|Monitor|Write|Edit|MultiEdit|NotebookEdit|WebFetch|WebSearch)$"
+                "^(mcp__.*|Skill|Agent|Task|Bash|PowerShell|Monitor|Read|Grep|Write|Edit|MultiEdit|NotebookEdit|WebFetch|WebSearch)$"
             )
         if configured[event] != [expected_group]:
             fail(f"{event} must use bounded synchronous admission that continues on failure")

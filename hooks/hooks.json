@@ -23,7 +23,7 @@
             "onFailure": "continue"
           }
         ],
-        "matcher": "^(mcp__.*|Skill|Agent|Task|Bash|PowerShell|Monitor|Write|Edit|MultiEdit|NotebookEdit|WebFetch|WebSearch)$"
+        "matcher": "^(mcp__.*|Skill|Agent|Task|Bash|PowerShell|Monitor|Read|Grep|Write|Edit|MultiEdit|NotebookEdit|WebFetch|WebSearch)$"
       }
     ],
     "UserPromptExpansion": [
