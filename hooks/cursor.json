@@ -3,7 +3,7 @@
   "hooks": {
     "sessionStart": [
       {
-        "command": "sh ./scripts/policy_hook.sh register --agent-kind cursor",
+        "command": "sh ./scripts/session_start.sh --agent-kind cursor",
         "timeout": 15
       }
     ],

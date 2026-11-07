@@ -357,6 +357,7 @@ manager.
 | Failure | Required behavior |
 | --- | --- |
 | Daemon is not running | `subscribe` does not start it (ADR-0008); the monitor fails to connect and the `SessionStart` hook reports the daemon socket is absent, routing to `/stacktrace:status` for detached-versus-host-managed remediation. |
+| A session start step fails | The session start script adds one line with a fixed stage to `session-start.log` in the Stacktrace state directory (ADR-0013). It never writes hook input, CLI output or environment values there. |
 | Monitor cannot connect | Retry with backoff; put diagnostics on stderr, never stdout. |
 | Monitor disconnects | Retain unacknowledged events for that session. |
 | Daemon restarts | Reload durable cursors and delivery state; subscribers reconnect. |

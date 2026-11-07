@@ -59,12 +59,11 @@ class DevinHooksTests(unittest.TestCase):
     def test_the_hooks_select_registration_and_mcp_calls_only(self):
         hooks = json.loads((PLUGIN / 'hooks.json').read_text())
         self.assertEqual(set(hooks), {'SessionStart', 'PreToolUse'})
-        for event, operation in (('SessionStart', 'register'), ('PreToolUse', 'admit')):
+        for event, script in (('SessionStart', 'session_start.sh"'), ('PreToolUse', 'policy_hook.sh" admit')):
             (group,) = hooks[event]
             (handler,) = group['hooks']
             self.assertEqual(handler['type'], 'command')
-            self.assertTrue(handler['command'].startswith('sh "${PLUGIN_ROOT}/scripts/policy_hook.sh" '))
-            self.assertTrue(handler['command'].endswith(operation + ' --agent-kind devin'))
+            self.assertEqual(handler['command'], 'sh "${PLUGIN_ROOT}/scripts/' + script + ' --agent-kind devin')
             self.assertNotIn('fail_closed', handler)
         # Devin matches a matcher as a regex search on tool_name.
         matcher = hooks['PreToolUse'][0]['matcher']
@@ -83,14 +82,16 @@ class DevinHooksTests(unittest.TestCase):
         self.assertEqual(devin['version'], claude['version'])
         self.assertNotIn('hooks', devin)
 
-    def test_validator_rejects_a_wrapper_that_drifts_from_the_shared_one(self):
-        directory, root = copy()
-        with directory:
-            with (root / 'devin/scripts/policy_hook.sh').open('a') as wrapper:
-                wrapper.write('echo extra\n')
-            result = validate(root)
-            self.assertEqual(result.returncode, 1)
-            self.assertIn('exact copy of scripts/policy_hook.sh', result.stderr)
+    def test_validator_rejects_a_script_that_drifts_from_the_shared_one(self):
+        for script in ('policy_hook.sh', 'session_start.sh'):
+            with self.subTest(script=script):
+                directory, root = copy()
+                with directory:
+                    with (root / 'devin/scripts' / script).open('a') as copied:
+                        copied.write('echo extra\n')
+                    result = validate(root)
+                    self.assertEqual(result.returncode, 1)
+                    self.assertIn('exact copy of scripts/' + script, result.stderr)
 
     def test_validator_rejects_anything_devin_would_load_into_every_session(self):
         for extra in ('AGENTS.md', 'rules/house.md', 'skills/status/SKILL.md'):

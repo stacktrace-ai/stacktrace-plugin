@@ -5,15 +5,26 @@
         "hooks": [
           {
             "type": "command",
-            "command": "sh \"${PLUGIN_ROOT}/scripts/policy_hook.sh\" register --agent-kind codex",
-            "timeout": 5
+            "command": "sh \"${PLUGIN_ROOT}/scripts/session_start.sh\" --agent-kind codex",
+            "timeout": 15
           }
         ]
       }
     ],
     "PreToolUse": [
       {
-        "matcher": "^mcp__.*",
+        "matcher": "^(mcp__.*|Bash)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"${PLUGIN_ROOT}/scripts/policy_hook.sh\" admit --agent-kind codex",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
         "hooks": [
           {
             "type": "command",

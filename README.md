@@ -149,7 +149,10 @@ stacktrace remote policy hooks status
 
 Start a new Claude session.
 The synchronous `PreToolUse` hook covers MCP tools, Skill calls and namespaced plugin-agent calls.
-It also covers the built-in tools that a Stacktrace detection rule can block: `Bash`, `PowerShell`, `Monitor`, `Write`, `Edit`, `MultiEdit`, `NotebookEdit`, `WebFetch` and `WebSearch`.
+It also covers the built-in tools that a Stacktrace detection rule can block: `Bash`, `Monitor`, `Write`, `Edit`, `MultiEdit`, `NotebookEdit`, `WebFetch` and `WebSearch`.
+The hook also receives `PowerShell` calls.
+On macOS and Linux, Claude Code runs that tool only when `CLAUDE_CODE_USE_POWERSHELL_TOOL=1` is set and `pwsh` is installed.
+`stacktrace-cli` 0.19.0 does not classify `PowerShell` yet, so it gives such a call no decision, and the call runs.
 MCP selection uses native server provenance.
 `UserPromptExpansion` covers direct slash-command expansion.
 `UserPromptSubmit` covers a prompt that a person submits.
@@ -203,7 +206,7 @@ Claude applies its normal permissions when Stacktrace produces no verdict.
 ## Session registration
 
 The plugin owns all Stacktrace hook declarations on laptops and remote workers.
-SessionStart calls `stacktrace remote policy hooks register`.
+SessionStart calls `stacktrace remote policy hooks register --agent-kind <kind>`.
 The CLI registers the launch project with the daemon.
 The daemon collects evidence and updates decisions asynchronously.
 
@@ -222,7 +225,9 @@ It checks installation and enablement before it removes an older installer-owned
 The CLI exposes no plugin installation command.
 Plugin validation and native conformance tests check hook declarations and failure behavior.
 
-One SessionStart script quietly invokes the CLI adapter before it emits notification guidance.
+One SessionStart script, `scripts/session_start.sh`, serves Claude Code, Codex, Cursor and Devin.
+Each host passes its kind with `--agent-kind` and gives the hook 15 seconds.
+The script quietly invokes the CLI adapter before it emits notification guidance.
 A missing or incompatible CLI cannot corrupt that guidance or block Claude.
 The script implements no daemon lifecycle or policy logic.
 The subscription and hook scripts prefer the default per-user CLI over an older system copy.
@@ -233,9 +238,59 @@ Verify a hosted start and resume before remote rollout.
 
 See [ADR-0009](docs/adrs/0009-delegate-session-registration-to-the-cli.md).
 
+### Session start on each host
+
+The script does the same steps for every host.
+It calls the CLI adapter, and it stops waiting after five seconds.
+Then it checks that the CLI is on `PATH` and that the daemon socket exists.
+When the socket is absent, it compares the CLI version with 0.5.2 before it waits for the daemon.
+Only Claude Code also checks the variables that stop its monitor.
+
+The output depends on the host:
+
+| Host | SessionStart output |
+| --- | --- |
+| Claude Code | The notification contract, the warnings and the one-time welcome. |
+| Codex | The warnings as one `systemMessage`, which Codex shows as a warning. |
+| Cursor | Nothing. Cursor documents no user-visible `sessionStart` field. |
+| Devin | Nothing. Devin documents no user-visible `SessionStart` field. |
+
+### Session start log
+
+Each failure adds one line to `~/.local/state/stacktrace/session-start.log`.
+Set `STACKTRACE_STATE_DIR` to use a different directory.
+The directory is private to the user.
+A healthy session writes nothing.
+
+```text
+2026-11-02T09:14:03Z codex plugin daemon-unreachable
+```
+
+The fields are the UTC time, the agent kind, the writer and the stage.
+The plugin writes `plugin`, and the CLI writes `cli`.
+The plugin writes these stages:
+
+| Stage | Meaning |
+| --- | --- |
+| `cli-missing` | `stacktrace` is not on `PATH`. |
+| `cli-too-old <version>` | The daemon socket is absent, and the CLI is older than 0.5.2 or its version is `unreadable`. |
+| `register-timeout` | The adapter call ran for five seconds, and the script stopped it. |
+| `register-exit <code>` | The adapter call failed. A CLI older than 0.14.0 rejects `--agent-kind` with code 2. |
+| `daemon-unreachable` | The daemon socket did not appear in five seconds. |
+| `monitor-disabled <variable>` | Claude Code only. The variable stops the Stacktrace monitor. |
+
+The log never holds hook input, CLI output or environment values.
+The file keeps its last 500 lines.
+
+See [ADR-0013](docs/adrs/0013-one-session-start-script-for-every-host.md).
+
 ## Codex CLI policy hooks
 
 The development adapter covers MCP tool use, including MCP servers with known plugin ownership.
+It also sends shell commands and prompts to the daemon, so a detection rule set to Block stops them.
+Codex names its shell tool `Bash` at the hook, also for a patch sent through the shell.
+A native `apply_patch` call is not sent, so its edit is found after the fact, not blocked.
+Shell commands and prompts need a `stacktrace-cli` newer than 0.21.0. An older CLI lets them continue.
 It calls the same user daemon as Claude.
 It does not add a notification monitor or a skill admission event.
 Desktop and cloud need separate conformance tests before rollout.
@@ -247,6 +302,7 @@ Unknown namespaces follow the MCP policy default.
 Plugin loading and skill context injection remain outside hook coverage.
 
 Codex reads `.codex-plugin/plugin.json` and `hooks/codex.json`.
+The `SessionStart` hook runs `scripts/session_start.sh`.
 The plugin reuses `scripts/policy_hook.sh` to discard output after failed CLI commands.
 The command performs no evaluation in this repository.
 
@@ -310,9 +366,9 @@ Test a checkout with `agent --plugin-dir <checkout>`.
 Cursor reads `~/.cursor/plugins/local` only when a team admin allows user plugin imports.
 
 Cursor reads `.cursor-plugin/plugin.json` and `hooks/cursor.json`.
-The `sessionStart` hook registers the project.
-The `beforeMCPExecution` hook asks the daemon for a decision.
-Both hooks run `scripts/policy_hook.sh` from the plugin root.
+The `sessionStart` hook runs `scripts/session_start.sh`, which registers the project.
+The `beforeMCPExecution` hook runs `scripts/policy_hook.sh` and asks the daemon for a decision.
+Both hooks run from the plugin root.
 The wrapper prints nothing when the CLI fails, so Cursor's own approval decides.
 The hooks do not set `failClosed`.
 
@@ -338,7 +394,7 @@ A managed manifest that requires this plugin does not enforce Fleet policy in cl
 
 The Devin plugin is the `devin` folder (ADR-0012).
 Devin reads `devin/.devin-plugin/plugin.json` and `devin/hooks.json`.
-The folder holds its own copy of `scripts/policy_hook.sh`.
+The folder holds its own copies of `scripts/policy_hook.sh` and `scripts/session_start.sh`.
 The validator rejects a copy that differs, and any other file in the folder.
 Devin loads an `AGENTS.md`, `rules/` and `skills/` from a plugin root into every session.
 
@@ -360,9 +416,9 @@ Add this entry to `requiredPlugins` in its managed manifest:
 Start a new session after the install.
 Type `/hooks` to see the two Stacktrace hooks.
 
-The `SessionStart` hook registers the project.
-The `PreToolUse` hook asks the daemon for a decision on `mcp__<server>__<tool>` and `mcp_call_tool`.
-Both hooks run the wrapper through `${PLUGIN_ROOT}`.
+The `SessionStart` hook runs `session_start.sh`, which registers the project.
+The `PreToolUse` hook runs `policy_hook.sh`, which asks the daemon for a decision on `mcp__<server>__<tool>` and `mcp_call_tool`.
+Both hooks run their scripts through `${PLUGIN_ROOT}`.
 Devin sets `PLUGIN_ROOT` for plugin hooks from Devin CLI 3000.11.92.
 The wrapper prints nothing when the CLI fails, so Devin's own permissions decide.
 The hooks do not set `fail_closed`.
