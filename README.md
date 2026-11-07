@@ -286,6 +286,10 @@ See [ADR-0013](docs/adrs/0013-one-session-start-script-for-every-host.md).
 ## Codex CLI policy hooks
 
 The development adapter covers MCP tool use, including MCP servers with known plugin ownership.
+It also sends shell commands and prompts to the daemon, so a detection rule set to Block stops them.
+Codex names its shell tool `Bash` at the hook, also for a patch sent through the shell.
+A native `apply_patch` call is not sent, so its edit is found after the fact, not blocked.
+Shell commands and prompts need a `stacktrace-cli` newer than 0.21.0. An older CLI lets them continue.
 It calls the same user daemon as Claude.
 It does not add a notification monitor or a skill admission event.
 Desktop and cloud need separate conformance tests before rollout.
