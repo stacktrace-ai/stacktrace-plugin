@@ -158,6 +158,7 @@ MCP selection uses native server provenance.
 `PostToolUse` and `PostToolUseFailure` send the result of an MCP, `Read`, `Grep`, `Glob`, `Bash`, `PowerShell`, `WebFetch`, `WebSearch`, `Agent` or `Task` call to the daemon.
 The daemon keeps keyed hashes of the values that the result names, for `stacktrace-injection-followed` (stacktrace ADR-0223).
 This hook never blocks and prints nothing.
+Before Claude Code 2.1.319, ending the turn with `Ctrl+Enter` while the tool runs skips this hook, so the result goes unmarked.
 Built-in tool and prompt decisions need `stacktrace-cli` 0.19.0 or newer.
 An older CLI may give no decision, and then the call or the prompt continues.
 Neither allow nor defer grants a native permission.
