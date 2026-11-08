@@ -418,11 +418,13 @@ Add this entry to `requiredPlugins` in its managed manifest:
 ```
 
 Start a new session after the install.
-Type `/hooks` to see the two Stacktrace hooks.
+Type `/hooks` to see the three Stacktrace hooks.
 
 The `SessionStart` hook runs `session_start.sh`, which registers the project.
 The `PreToolUse` hook runs `policy_hook.sh`, which asks the daemon for a decision on `mcp__<server>__<tool>` and `mcp_call_tool`.
-Both hooks run their scripts through `${PLUGIN_ROOT}`.
+The `UserPromptSubmit` hook runs `policy_hook.sh`, which asks the daemon for a decision on a submitted prompt.
+A blocked prompt gets Devin's top-level `decision: block`.
+All hooks run their scripts through `${PLUGIN_ROOT}`.
 Devin sets `PLUGIN_ROOT` for plugin hooks from Devin CLI 3000.11.92.
 The wrapper prints nothing when the CLI fails, so Devin's own permissions decide.
 The hooks do not set `fail_closed`.
