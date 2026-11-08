@@ -343,19 +343,25 @@ class PluginContractTests(unittest.TestCase):
 
     def test_admission_reaches_every_tool_a_stacktrace_rule_can_block(self) -> None:
         # The built-in tools whose class a blockable Stacktrace rule reads:
-        # `shell`, `file_write`, `file_edit`, `web_fetch` and `web_search`
-        # (stacktrace `hooks/claude.py`, `INSPECTED_CLASSES`, ADR-0158). The CLI
-        # decides; the matcher only has to deliver the call.
+        # `shell`, `file_read`, `file_search`, `file_write`, `file_edit`,
+        # `web_fetch` and `web_search` (stacktrace `hooks/claude.py`,
+        # `INSPECTED_CLASSES`, ADR-0158). The CLI decides; the matcher only has
+        # to deliver the call. `Read` and `Grep` name a file, so
+        # `stacktrace-secret-path-read` can stop a read of `.env` or an SSH key
+        # before it runs (stacktrace ADR-0193).
         document = json.loads((ROOT / "hooks" / "hooks.json").read_text(encoding="utf-8"))
         matcher = re.compile(document["hooks"]["PreToolUse"][0]["matcher"])
         blockable = (
-            "Bash", "PowerShell", "Monitor", "Write", "Edit", "MultiEdit", "NotebookEdit", "WebFetch", "WebSearch",
+            "Bash", "PowerShell", "Monitor", "Read", "Grep", "Write", "Edit", "MultiEdit", "NotebookEdit",
+            "WebFetch", "WebSearch",
             "Skill", "Agent", "Task", "mcp__github__create_issue",
         )
         for tool in blockable:
             self.assertTrue(matcher.fullmatch(tool), tool)
-        # A tool no rule reads pays no hook round trip.
-        for tool in ("Read", "Grep", "Glob", "LS", "TodoWrite", "BashOutput", "KillShell", "NotebookRead"):
+        # A tool no rule can block pays no hook round trip. `Glob` lists paths
+        # and reads no file, which the secret-path rule never stops; `LS` and
+        # `NotebookRead` are no longer Claude Code tools (`Read` reads notebooks).
+        for tool in ("Glob", "LS", "TodoWrite", "BashOutput", "KillShell", "NotebookRead"):
             self.assertFalse(matcher.fullmatch(tool), tool)
 
     def test_a_submitted_prompt_reaches_admission(self) -> None:
@@ -857,9 +863,9 @@ class PolicyHookContractTests(unittest.TestCase):
         matcher = re.compile(document["hooks"]["PreToolUse"][0]["matcher"])
         for tool in ("mcp__github__read", "Skill", "Agent", "Task"):
             self.assertIsNotNone(matcher.fullmatch(tool))
-        # Bash and Write now reach admission too: a blockable rule reads them
-        # (test_admission_reaches_every_tool_a_stacktrace_rule_can_block).
-        self.assertIsNone(matcher.fullmatch("Read"))
+        # Bash, Write and Read now reach admission too: a blockable rule reads
+        # them (test_admission_reaches_every_tool_a_stacktrace_rule_can_block).
+        self.assertIsNone(matcher.fullmatch("Glob"))
 
 
 class PolicyAdapterExitTests(unittest.TestCase):
