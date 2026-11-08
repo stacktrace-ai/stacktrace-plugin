@@ -57,9 +57,10 @@ def main() -> int:
     expected_cursor = {
         "sessionStart": [{"command": "sh ./scripts/session_start.sh --agent-kind cursor", "timeout": 15}],
         "beforeMCPExecution": [{"command": "sh ./scripts/policy_hook.sh admit --agent-kind cursor", "timeout": 5}],
+        "beforeSubmitPrompt": [{"command": "sh ./scripts/policy_hook.sh admit --agent-kind cursor", "timeout": 5}],
     }
     if load_json("hooks/cursor.json") != {"version": 1, "hooks": expected_cursor}:
-        fail("Cursor hooks must delegate registration to the session start script and MCP admission to the failure wrapper")
+        fail("Cursor hooks must delegate registration to the session start script, and MCP and prompt admission to the failure wrapper")
 
     # Devin installs the `devin` folder (ADR-0012). Its manifest has no hooks
     # field: Devin reads `hooks.json` at the plugin root. The folder carries its
@@ -69,9 +70,10 @@ def main() -> int:
     expected_devin = {
         "SessionStart": [{"matcher": "", "hooks": [{"type": "command", "command": 'sh "${PLUGIN_ROOT}/scripts/session_start.sh" --agent-kind devin', "timeout": 15}]}],
         "PreToolUse": [{"matcher": "^(mcp__.+|mcp_call_tool)$", "hooks": [{"type": "command", "command": 'sh "${PLUGIN_ROOT}/scripts/policy_hook.sh" admit --agent-kind devin', "timeout": 5}]}],
+        "UserPromptSubmit": [{"matcher": "", "hooks": [{"type": "command", "command": 'sh "${PLUGIN_ROOT}/scripts/policy_hook.sh" admit --agent-kind devin', "timeout": 5}]}],
     }
     if load_json("devin/hooks.json") != expected_devin:
-        fail("Devin hooks must delegate registration to the session start script and MCP admission to the failure wrapper")
+        fail("Devin hooks must delegate registration to the session start script, and MCP and prompt admission to the failure wrapper")
     for script in ("policy_hook.sh", "session_start.sh"):
         copy = ROOT / "devin" / "scripts" / script
         if not copy.is_file() or copy.read_bytes() != (ROOT / "scripts" / script).read_bytes():

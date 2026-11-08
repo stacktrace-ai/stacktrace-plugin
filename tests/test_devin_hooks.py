@@ -56,10 +56,10 @@ class DevinHooksTests(unittest.TestCase):
             self.assertEqual(json.loads(result.stdout), {'decision': 'block', 'reason': 'r'})
             self.assertEqual((root / 'args').read_text(), 'remote policy hooks admit --agent-kind devin\n')
 
-    def test_the_hooks_select_registration_and_mcp_calls_only(self):
+    def test_the_hooks_select_registration_mcp_calls_and_prompts_only(self):
         hooks = json.loads((PLUGIN / 'hooks.json').read_text())
-        self.assertEqual(set(hooks), {'SessionStart', 'PreToolUse'})
-        for event, script in (('SessionStart', 'session_start.sh"'), ('PreToolUse', 'policy_hook.sh" admit')):
+        self.assertEqual(set(hooks), {'SessionStart', 'PreToolUse', 'UserPromptSubmit'})
+        for event, script in (('SessionStart', 'session_start.sh"'), ('PreToolUse', 'policy_hook.sh" admit'), ('UserPromptSubmit', 'policy_hook.sh" admit')):
             (group,) = hooks[event]
             (handler,) = group['hooks']
             self.assertEqual(handler['type'], 'command')
@@ -70,6 +70,8 @@ class DevinHooksTests(unittest.TestCase):
         selected = {'mcp__github__create_issue', 'mcp__fixture__ping', 'mcp_call_tool'}
         others = {'exec', 'read', 'write', 'edit', 'skill', 'run_subagent', 'mcp_list_tools', 'mcp_read_resource', 'xmcp_call_tool'}
         self.assertEqual({name for name in selected | others if re.search(matcher, name)}, selected)
+        # A prompt has no tool name; Devin's docs say a non-tool event takes "".
+        self.assertEqual(hooks['UserPromptSubmit'][0]['matcher'], '')
 
     def test_session_start_gives_registration_room_to_survive_daemon_recovery(self):
         hooks = json.loads((PLUGIN / 'hooks.json').read_text())
