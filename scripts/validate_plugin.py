@@ -182,7 +182,7 @@ def main() -> int:
             # (stacktrace ADR-0223). A failed call's text can carry a mark
             # too. Neither blocks nor prints.
             expected_group["matcher"] = (
-                "^(mcp__.*|Read|Grep|Glob|Bash|PowerShell|WebFetch|WebSearch|Agent|Task)$"
+                "^(mcp__.*|Read|Grep|Glob|Bash|Monitor|PowerShell|WebFetch|WebSearch|Agent|Task)$"
             )
         if configured[event] != [expected_group]:
             fail(f"{event} must use bounded synchronous admission that continues on failure")

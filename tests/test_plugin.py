@@ -372,7 +372,7 @@ class PluginContractTests(unittest.TestCase):
         (group,) = document["hooks"]["PostToolUse"]
         self.assertEqual(group["hooks"][0]["onFailure"], "continue")
         matcher = re.compile(group["matcher"])
-        for tool in ("mcp__github__get_issue", "Read", "Grep", "Glob", "Bash", "WebFetch", "WebSearch", "Agent", "Task"):
+        for tool in ("mcp__github__get_issue", "Read", "Grep", "Glob", "Bash", "Monitor", "WebFetch", "WebSearch", "Agent", "Task"):
             self.assertTrue(matcher.fullmatch(tool), tool)
         for tool in ("Write", "Edit", "TodoWrite", "Skill"):
             self.assertFalse(matcher.fullmatch(tool), tool)
