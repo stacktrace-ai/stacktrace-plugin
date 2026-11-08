@@ -152,7 +152,7 @@ def main() -> int:
         fail("plugin must declare exactly one direct Stacktrace session monitor")
 
     configured = hooks.get("hooks") if isinstance(hooks, dict) else None
-    if not isinstance(configured, dict) or set(configured) != {"SessionStart", "PreToolUse", "PostToolUse", "UserPromptExpansion", "UserPromptSubmit"}:
+    if not isinstance(configured, dict) or set(configured) != {"SessionStart", "PreToolUse", "PostToolUse", "PostToolUseFailure", "UserPromptExpansion", "UserPromptSubmit"}:
         fail("hooks must contain SessionStart guidance, the three synchronous admission events and PostToolUse marking")
     expected_start = {"hooks": [{
         "type": "command",
@@ -163,7 +163,7 @@ def main() -> int:
     if configured["SessionStart"] != [expected_start]:
         fail("SessionStart must teach notifications and delegate registration to the CLI")
 
-    for event in ("PreToolUse", "PostToolUse", "UserPromptExpansion", "UserPromptSubmit"):
+    for event in ("PreToolUse", "PostToolUse", "PostToolUseFailure", "UserPromptExpansion", "UserPromptSubmit"):
         expected_group = {
             "hooks": [{
                 "type": "command",
@@ -177,11 +177,12 @@ def main() -> int:
             expected_group["matcher"] = (
                 "^(mcp__.*|Skill|Agent|Task|Bash|PowerShell|Monitor|Read|Grep|Glob|Write|Edit|MultiEdit|NotebookEdit|WebFetch|WebSearch)$"
             )
-        if event == "PostToolUse":
+        if event in ("PostToolUse", "PostToolUseFailure"):
             # The results that bring untrusted text, for injection marking
-            # (stacktrace ADR-0223). It never blocks and prints nothing.
+            # (stacktrace ADR-0223). A failed call's text can carry a mark
+            # too. Neither blocks nor prints.
             expected_group["matcher"] = (
-                "^(mcp__.*|Read|Grep|Bash|PowerShell|WebFetch|WebSearch|Agent|Task)$"
+                "^(mcp__.*|Read|Grep|Glob|Bash|PowerShell|WebFetch|WebSearch|Agent|Task)$"
             )
         if configured[event] != [expected_group]:
             fail(f"{event} must use bounded synchronous admission that continues on failure")

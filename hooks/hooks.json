@@ -36,7 +36,20 @@
             "onFailure": "continue"
           }
         ],
-        "matcher": "^(mcp__.*|Read|Grep|Bash|PowerShell|WebFetch|WebSearch|Agent|Task)$"
+        "matcher": "^(mcp__.*|Read|Grep|Glob|Bash|PowerShell|WebFetch|WebSearch|Agent|Task)$"
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/scripts/policy_hook.sh\" admit 2>/dev/null || true",
+            "timeout": 5,
+            "onFailure": "continue"
+          }
+        ],
+        "matcher": "^(mcp__.*|Read|Grep|Glob|Bash|PowerShell|WebFetch|WebSearch|Agent|Task)$"
       }
     ],
     "UserPromptExpansion": [

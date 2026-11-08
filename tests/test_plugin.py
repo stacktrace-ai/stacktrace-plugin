@@ -341,7 +341,7 @@ class PluginContractTests(unittest.TestCase):
         # (stacktrace ADR-0223).
         self.assertEqual(
             set(document["hooks"]),
-            {"SessionStart", "PreToolUse", "PostToolUse", "UserPromptExpansion", "UserPromptSubmit"},
+            {"SessionStart", "PreToolUse", "PostToolUse", "PostToolUseFailure", "UserPromptExpansion", "UserPromptSubmit"},
         )
 
     def test_admission_reaches_every_tool_a_stacktrace_rule_can_block(self) -> None:
@@ -367,12 +367,14 @@ class PluginContractTests(unittest.TestCase):
         # Marking for the injection rule (stacktrace ADR-0223). A result the
         # agent made itself, such as a file it wrote, brings no outside text.
         document = json.loads((ROOT / "hooks" / "hooks.json").read_text(encoding="utf-8"))
+        # A failed call's text can carry a mark too, so failures match alike.
+        self.assertEqual(document["hooks"]["PostToolUseFailure"], document["hooks"]["PostToolUse"])
         (group,) = document["hooks"]["PostToolUse"]
         self.assertEqual(group["hooks"][0]["onFailure"], "continue")
         matcher = re.compile(group["matcher"])
-        for tool in ("mcp__github__get_issue", "Read", "Grep", "Bash", "WebFetch", "WebSearch", "Agent", "Task"):
+        for tool in ("mcp__github__get_issue", "Read", "Grep", "Glob", "Bash", "WebFetch", "WebSearch", "Agent", "Task"):
             self.assertTrue(matcher.fullmatch(tool), tool)
-        for tool in ("Write", "Edit", "TodoWrite", "Glob", "Skill"):
+        for tool in ("Write", "Edit", "TodoWrite", "Skill"):
             self.assertFalse(matcher.fullmatch(tool), tool)
 
     def test_a_submitted_prompt_reaches_admission(self) -> None:
