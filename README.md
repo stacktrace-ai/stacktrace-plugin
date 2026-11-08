@@ -155,7 +155,7 @@ On macOS and Linux, Claude Code runs that tool only when `CLAUDE_CODE_USE_POWERS
 MCP selection uses native server provenance.
 `UserPromptExpansion` covers direct slash-command expansion.
 `UserPromptSubmit` covers a prompt that a person submits.
-`PostToolUse` and `PostToolUseFailure` send the result of an MCP, `Read`, `Grep`, `Glob`, `Bash`, `Monitor`, `PowerShell`, `WebFetch`, `WebSearch`, `Agent`, `Task`, `TaskOutput` or `SubagentHandback` call to the daemon.
+`PostToolUse` and `PostToolUseFailure` send the result of an MCP, `Read`, `Grep`, `Glob`, `Bash`, `Monitor`, `PowerShell`, `WebFetch`, `WebSearch`, `Agent`, `Task`, `TaskOutput`, `SubagentHandback` or `ReadMcpResourceTool` call to the daemon.
 The daemon keeps keyed hashes of the values that the result names, for `stacktrace-injection-followed` (stacktrace ADR-0223).
 This hook never blocks and prints nothing.
 Before Claude Code 2.1.319, ending the turn with `Ctrl+Enter` while the tool runs skips this hook, so the result goes unmarked.
