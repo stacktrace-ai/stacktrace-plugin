@@ -340,7 +340,7 @@ A release promotion must test both native hosts before changing that pin.
 
 ## Cursor policy hooks
 
-The Cursor adapter covers MCP tool use, including MCP servers that a plugin bundles.
+The Cursor adapter covers MCP tool use, including MCP servers that a plugin bundles, and submitted prompts.
 It calls the same user daemon as Claude and Codex.
 It adds no notification monitor and no skill, command or sub-agent admission.
 The Cursor CLI fires no admission event for those.
@@ -367,8 +367,9 @@ Cursor reads `~/.cursor/plugins/local` only when a team admin allows user plugin
 
 Cursor reads `.cursor-plugin/plugin.json` and `hooks/cursor.json`.
 The `sessionStart` hook runs `scripts/session_start.sh`, which registers the project.
-The `beforeMCPExecution` hook runs `scripts/policy_hook.sh` and asks the daemon for a decision.
-Both hooks run from the plugin root.
+The `beforeMCPExecution` and `beforeSubmitPrompt` hooks run `scripts/policy_hook.sh` and ask the daemon for a decision.
+A blocked prompt gets `continue: false`, and Cursor shows the reason to the person.
+The hooks run from the plugin root.
 The wrapper prints nothing when the CLI fails, so Cursor's own approval decides.
 The hooks do not set `failClosed`.
 
@@ -384,8 +385,11 @@ The desktop app and Cursor's public marketplace are not yet tested.
 
 ## Devin policy hooks
 
-The Devin adapter covers MCP tool use.
+The Devin adapter covers MCP tool use and submitted prompts.
 It calls the same user daemon as Claude, Codex and Cursor.
+A blocked prompt gets Devin's top-level `decision: block`.
+No signed-in Devin session has confirmed that Devin stops a prompt on it.
+An older CLI returns no decision for a Devin prompt, so the prompt continues.
 It adds no notification monitor and no skill, sub-agent or built-in tool admission.
 Fleet's MCP default decides each Devin MCP call, because OpenACA collects no Devin policy evidence yet.
 The hooks run only in local Devin sessions: the CLI and Devin Desktop.
@@ -414,11 +418,13 @@ Add this entry to `requiredPlugins` in its managed manifest:
 ```
 
 Start a new session after the install.
-Type `/hooks` to see the two Stacktrace hooks.
+Type `/hooks` to see the three Stacktrace hooks.
 
 The `SessionStart` hook runs `session_start.sh`, which registers the project.
 The `PreToolUse` hook runs `policy_hook.sh`, which asks the daemon for a decision on `mcp__<server>__<tool>` and `mcp_call_tool`.
-Both hooks run their scripts through `${PLUGIN_ROOT}`.
+The `UserPromptSubmit` hook runs `policy_hook.sh`, which asks the daemon for a decision on a submitted prompt.
+A blocked prompt gets Devin's top-level `decision: block`.
+All hooks run their scripts through `${PLUGIN_ROOT}`.
 Devin sets `PLUGIN_ROOT` for plugin hooks from Devin CLI 3000.11.92.
 The wrapper prints nothing when the CLI fails, so Devin's own permissions decide.
 The hooks do not set `fail_closed`.

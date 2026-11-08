@@ -12,6 +12,12 @@
         "command": "sh ./scripts/policy_hook.sh admit --agent-kind cursor",
         "timeout": 5
       }
+    ],
+    "beforeSubmitPrompt": [
+      {
+        "command": "sh ./scripts/policy_hook.sh admit --agent-kind cursor",
+        "timeout": 5
+      }
     ]
   }
 }
