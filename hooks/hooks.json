@@ -1,5 +1,5 @@
 {
-  "description": "Teach notification delivery and request synchronous hook-visible policy admission for tools and prompts.",
+  "description": "Teach notification delivery, request synchronous hook-visible policy admission for tools and prompts, and send tool results for injection marking.",
   "hooks": {
     "SessionStart": [
       {
@@ -23,7 +23,33 @@
             "onFailure": "continue"
           }
         ],
-        "matcher": "^(mcp__.*|Skill|Agent|Task|Bash|PowerShell|Monitor|Write|Edit|MultiEdit|NotebookEdit|WebFetch|WebSearch)$"
+        "matcher": "^(mcp__.*|Skill|Agent|Task|Bash|PowerShell|Monitor|Read|Grep|Glob|Write|Edit|MultiEdit|NotebookEdit|WebFetch|WebSearch)$"
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/scripts/policy_hook.sh\" admit 2>/dev/null || true",
+            "timeout": 5,
+            "onFailure": "continue"
+          }
+        ],
+        "matcher": "^(mcp__.*|Read|Grep|Glob|Bash|Monitor|PowerShell|WebFetch|WebSearch|Agent|Task|TaskOutput|SubagentHandback|ReadMcpResourceTool|ListMcpResourcesTool|LSP)$"
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/scripts/policy_hook.sh\" admit 2>/dev/null || true",
+            "timeout": 5,
+            "onFailure": "continue"
+          }
+        ],
+        "matcher": "^(mcp__.*|Read|Grep|Glob|Bash|Monitor|PowerShell|WebFetch|WebSearch|Agent|Task|TaskOutput|SubagentHandback|ReadMcpResourceTool|ListMcpResourcesTool|LSP)$"
       }
     ],
     "UserPromptExpansion": [

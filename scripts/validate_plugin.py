@@ -154,8 +154,8 @@ def main() -> int:
         fail("plugin must declare exactly one direct Stacktrace session monitor")
 
     configured = hooks.get("hooks") if isinstance(hooks, dict) else None
-    if not isinstance(configured, dict) or set(configured) != {"SessionStart", "PreToolUse", "UserPromptExpansion", "UserPromptSubmit"}:
-        fail("hooks must contain SessionStart guidance and the three synchronous admission events")
+    if not isinstance(configured, dict) or set(configured) != {"SessionStart", "PreToolUse", "PostToolUse", "PostToolUseFailure", "UserPromptExpansion", "UserPromptSubmit"}:
+        fail("hooks must contain SessionStart guidance, the three synchronous admission events and PostToolUse marking")
     expected_start = {"hooks": [{
         "type": "command",
         "command": 'sh "${CLAUDE_PLUGIN_ROOT}/scripts/session_start.sh" --agent-kind claude-code 2>/dev/null || true',
@@ -165,7 +165,7 @@ def main() -> int:
     if configured["SessionStart"] != [expected_start]:
         fail("SessionStart must teach notifications and delegate registration to the CLI")
 
-    for event in ("PreToolUse", "UserPromptExpansion", "UserPromptSubmit"):
+    for event in ("PreToolUse", "PostToolUse", "PostToolUseFailure", "UserPromptExpansion", "UserPromptSubmit"):
         expected_group = {
             "hooks": [{
                 "type": "command",
@@ -175,8 +175,16 @@ def main() -> int:
             }],
         }
         if event == "PreToolUse":
+            # Read, Grep and Glob carry the paths stacktrace ADR-0193 reads.
             expected_group["matcher"] = (
-                "^(mcp__.*|Skill|Agent|Task|Bash|PowerShell|Monitor|Write|Edit|MultiEdit|NotebookEdit|WebFetch|WebSearch)$"
+                "^(mcp__.*|Skill|Agent|Task|Bash|PowerShell|Monitor|Read|Grep|Glob|Write|Edit|MultiEdit|NotebookEdit|WebFetch|WebSearch)$"
+            )
+        if event in ("PostToolUse", "PostToolUseFailure"):
+            # The results that bring untrusted text, for injection marking
+            # (stacktrace ADR-0223). A failed call's text can carry a mark
+            # too. Neither blocks nor prints.
+            expected_group["matcher"] = (
+                "^(mcp__.*|Read|Grep|Glob|Bash|Monitor|PowerShell|WebFetch|WebSearch|Agent|Task|TaskOutput|SubagentHandback|ReadMcpResourceTool|ListMcpResourcesTool|LSP)$"
             )
         if configured[event] != [expected_group]:
             fail(f"{event} must use bounded synchronous admission that continues on failure")

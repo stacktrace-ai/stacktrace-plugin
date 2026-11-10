@@ -148,13 +148,19 @@ stacktrace remote policy hooks status
 
 Start a new Claude session.
 The synchronous `PreToolUse` hook covers MCP tools, Skill calls and namespaced plugin-agent calls.
-It also covers the built-in tools that a Stacktrace detection rule can block: `Bash`, `Monitor`, `Write`, `Edit`, `MultiEdit`, `NotebookEdit`, `WebFetch` and `WebSearch`.
+It also covers the built-in tools that a Stacktrace detection rule can block: `Bash`, `Monitor`, `Read`, `Grep`, `Glob`, `Write`, `Edit`, `MultiEdit`, `NotebookEdit`, `WebFetch` and `WebSearch`.
 The hook also receives `PowerShell` calls.
 On macOS and Linux, Claude Code runs that tool only when `CLAUDE_CODE_USE_POWERSHELL_TOOL=1` is set and `pwsh` is installed.
 `stacktrace-cli` 0.19.0 does not classify `PowerShell` yet, so it gives such a call no decision, and the call runs.
 MCP selection uses native server provenance.
 `UserPromptExpansion` covers direct slash-command expansion.
 `UserPromptSubmit` covers a prompt that a person submits.
+`PostToolUse` and `PostToolUseFailure` send the result of an MCP, `Read`, `Grep`, `Glob`, `Bash`, `Monitor`, `PowerShell`, `WebFetch`, `WebSearch`, `Agent`, `Task`, `TaskOutput`, `SubagentHandback`, `ReadMcpResourceTool`, `ListMcpResourcesTool` or `LSP` call to the daemon.
+The daemon keeps keyed hashes of the values that the result names, for `stacktrace-injection-followed` (stacktrace ADR-0223).
+This hook needs a `stacktrace-cli` release newer than 0.24.0, the first with that rule.
+An older CLI ignores the result, so the rule's Block denies nothing.
+This hook never blocks and prints nothing.
+Before Claude Code 2.1.319, ending the turn with `Ctrl+Enter` while the tool runs skips this hook, so the result goes unmarked.
 Built-in tool and prompt decisions need `stacktrace-cli` 0.19.0 or newer.
 An older CLI may give no decision, and then the call or the prompt continues.
 Neither allow nor defer grants a native permission.
