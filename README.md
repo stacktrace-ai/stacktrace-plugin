@@ -157,6 +157,8 @@ MCP selection uses native server provenance.
 `UserPromptSubmit` covers a prompt that a person submits.
 `PostToolUse` and `PostToolUseFailure` send the result of an MCP, `Read`, `Grep`, `Glob`, `Bash`, `Monitor`, `PowerShell`, `WebFetch`, `WebSearch`, `Agent`, `Task`, `TaskOutput`, `SubagentHandback`, `ReadMcpResourceTool`, `ListMcpResourcesTool` or `LSP` call to the daemon.
 The daemon keeps keyed hashes of the values that the result names, for `stacktrace-injection-followed` (stacktrace ADR-0223).
+This hook needs a `stacktrace-cli` release newer than 0.24.0, the first with that rule.
+An older CLI ignores the result, so the rule's Block denies nothing.
 This hook never blocks and prints nothing.
 Before Claude Code 2.1.319, ending the turn with `Ctrl+Enter` while the tool runs skips this hook, so the result goes unmarked.
 Built-in tool and prompt decisions need `stacktrace-cli` 0.19.0 or newer.
