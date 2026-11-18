@@ -229,9 +229,10 @@ class BuildZipTests(unittest.TestCase):
         env = {k: v for k, v in os.environ.items() if not k.startswith("STACKTRACE_")}
         if token is not None:
             env["STACKTRACE_REMOTE_TOKEN"] = token
+        # A session of its own has no terminal, so the token prompt is skipped.
         return subprocess.run(
             ["sh", str(ROOT / "scripts/build_cowork_zip.sh"), str(Path(self.out.name, "p.zip")), *args],
-            capture_output=True, text=True, check=False, env=env,
+            capture_output=True, text=True, check=False, env=env, start_new_session=True,
         )
 
     def names(self) -> list[str]:
@@ -273,6 +274,88 @@ class BuildZipTests(unittest.TestCase):
                 self.assertNotEqual(result.returncode, 0)
                 self.assertFalse(Path(self.out.name, "p.zip").exists())
                 self.assertNotIn(TOKEN, result.stderr + result.stdout)
+
+
+class PipedBuildTests(unittest.TestCase):
+    """`curl ... | sh` has no checkout: the script downloads the plugin."""
+
+    SHA = "0123456789abcdef0123456789abcdef01234567"
+
+    def setUp(self) -> None:
+        self.work = tempfile.TemporaryDirectory()
+        work = Path(self.work.name)
+        self.log = work / "curl.log"
+        self.zip = work / "p.zip"
+        self.bin = work / "bin"
+        self.bin.mkdir()
+
+    def tearDown(self) -> None:
+        self.work.cleanup()
+
+    def serve(self, ref: str) -> None:
+        """A `curl` that serves the pinned SHA and the plugin as of `ref`."""
+        tarball = Path(self.work.name, "plugin.tar.gz")
+        archive = subprocess.run(
+            ["git", "-C", str(ROOT), "archive", "--format=tar.gz", "--prefix=stacktrace-plugin-x/", ref],
+            capture_output=True, check=True,
+        )
+        tarball.write_bytes(archive.stdout)
+        curl = self.bin / "curl"
+        curl.write_text(
+            "#!/bin/sh\n"
+            'for url; do :; done\n'
+            'echo "$url" >>"%s"\n'
+            'case $url in\n'
+            '  *marketplace.json) echo \'{"source": {"sha": "%s"}}\' ;;\n'
+            '  *codeload*) cat "%s" ;;\n'
+            "  *) exit 22 ;;\n"
+            "esac\n" % (self.log, self.SHA, tarball)
+        )
+        curl.chmod(0o755)
+
+    def build(self, **extra: str) -> subprocess.CompletedProcess[str]:
+        env = {k: v for k, v in os.environ.items() if not k.startswith("STACKTRACE_")}
+        env.update(PATH=f"{self.bin}{os.pathsep}{env['PATH']}", STACKTRACE_REMOTE_TOKEN=TOKEN, **extra)
+        script = (ROOT / "scripts/build_cowork_zip.sh").read_text()
+        return subprocess.run(
+            ["sh", "-s", "--", str(self.zip)], input=script, cwd=self.work.name,
+            capture_output=True, text=True, check=False, env=env, start_new_session=True,
+        )
+
+    def test_it_downloads_the_commit_production_pins(self) -> None:
+        self.serve("HEAD")
+
+        result = self.build()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        urls = self.log.read_text().splitlines()
+        self.assertTrue(urls[0].endswith("/main/.claude-plugin/marketplace.json"))
+        self.assertEqual(urls[1], f"https://codeload.github.com/stacktrace-ai/stacktrace-plugin/tar.gz/{self.SHA}")
+        import zipfile
+
+        with zipfile.ZipFile(self.zip) as archive:
+            self.assertIn("scripts/session_start.sh", archive.namelist())
+            self.assertEqual(archive.read("cowork/enroll.env").decode(), f"STACKTRACE_REMOTE_TOKEN={TOKEN}\n")
+        self.assertIn("Organization settings > Plugins & skills", result.stdout)
+
+    def test_a_named_ref_is_downloaded_in_place_of_the_pin(self) -> None:
+        self.serve("HEAD")
+
+        self.build(STACKTRACE_PLUGIN_REF="v9.9.9")
+
+        self.assertEqual(
+            self.log.read_text().splitlines(),
+            ["https://codeload.github.com/stacktrace-ai/stacktrace-plugin/tar.gz/v9.9.9"],
+        )
+
+    def test_a_release_without_cowork_support_is_refused(self) -> None:
+        self.serve("v0.4.3")
+
+        result = self.build()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("does not support Claude Cowork yet", result.stderr)
+        self.assertFalse(self.zip.exists())
 
 
 if __name__ == "__main__":

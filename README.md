@@ -40,6 +40,30 @@ Each session start says when the CLI or the daemon is missing, and
 the detached daemon with `stacktrace daemon stop` followed by `stacktrace daemon
 start`, or restart the host-managed service.
 
+## Claude Cowork
+
+Claude Cowork runs each task in a new cloud VM. Cowork does not read
+`~/.claude`, and it has no plugin settings. So an Owner uploads a zip that
+holds this plugin and the organization's Fleet token (ADR-0014). A Team or
+Enterprise plan is necessary.
+
+1. Run this command on any Mac or Linux computer. It asks for the Fleet
+   token, and writes `~/Downloads/stacktrace-cowork.zip`:
+
+   ```sh
+   curl -fsSL https://raw.githubusercontent.com/stacktrace-ai/stacktrace-plugin/main/scripts/build_cowork_zip.sh | sh
+   ```
+
+2. In claude.ai, open Organization settings > Capabilities > Code execution.
+   Keep network egress on, and allow `api.stacktrace.ai` and `stacktrace.ai`.
+3. Open Organization settings > Plugins & skills. Upload the zip, and set it
+   to Required.
+
+Each new Cowork task then installs the CLI, connects to Fleet and applies the
+organization's policy. Use a Fleet token for Cowork only, and keep the zip as
+you keep the token. Make a new zip and upload it after each plugin release,
+and when you rotate the token.
+
 ## Automatic flow
 
 For each interactive Claude session, the plugin runs:
