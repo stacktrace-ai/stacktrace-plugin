@@ -1,5 +1,5 @@
 {
-  "description": "Teach notification delivery, request synchronous hook-visible policy admission for tools and prompts, and send tool results for injection marking.",
+  "description": "Teach notification delivery, request synchronous hook-visible policy admission for tools and prompts, send tool results for injection marking, and journal the turn where the agent keeps no transcript.",
   "hooks": {
     "SessionStart": [
       {
@@ -7,7 +7,7 @@
           {
             "type": "command",
             "command": "sh \"${CLAUDE_PLUGIN_ROOT}/scripts/session_start.sh\" --agent-kind claude-code 2>/dev/null || true",
-            "timeout": 15,
+            "timeout": 60,
             "onFailure": "continue"
           }
         ]
@@ -37,6 +37,17 @@
           }
         ],
         "matcher": "^(mcp__.*|Read|Grep|Glob|Bash|Monitor|PowerShell|WebFetch|WebSearch|Agent|Task|TaskOutput|SubagentHandback|ReadMcpResourceTool|ListMcpResourcesTool|LSP)$"
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/scripts/policy_hook.sh\" --without-transcript admit 2>/dev/null || true",
+            "timeout": 5,
+            "onFailure": "continue"
+          }
+        ],
+        "matcher": "^(Write|Edit|MultiEdit|NotebookEdit)$"
       }
     ],
     "PostToolUseFailure": [
@@ -70,6 +81,18 @@
           {
             "type": "command",
             "command": "sh \"${CLAUDE_PLUGIN_ROOT}/scripts/policy_hook.sh\" admit 2>/dev/null || true",
+            "timeout": 5,
+            "onFailure": "continue"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/scripts/policy_hook.sh\" --without-transcript admit 2>/dev/null || true",
             "timeout": 5,
             "onFailure": "continue"
           }

@@ -83,6 +83,7 @@ def isolated(home: str, stubs: Stubs, *, cli: bool = True, daemon: bool = True, 
         "CLAUDE_CONFIG_DIR",
         "CLAUDE_PLUGIN_DATA",
         "CLAUDE_CODE_REMOTE",
+        "CLAUDE_CODE_ENTRYPOINT",
         "VIRTUAL_ENV",
         "NO_COLOR",
         "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC",
@@ -341,8 +342,14 @@ class PluginContractTests(unittest.TestCase):
         # (stacktrace ADR-0223).
         self.assertEqual(
             set(document["hooks"]),
-            {"SessionStart", "PreToolUse", "PostToolUse", "PostToolUseFailure", "UserPromptExpansion", "UserPromptSubmit"},
+            {"SessionStart", "PreToolUse", "PostToolUse", "PostToolUseFailure", "UserPromptExpansion", "UserPromptSubmit", "Stop"},
         )
+        # `Stop` reaches the CLI only where the agent keeps no transcript, as
+        # in a Cowork VM, for its journal (stacktrace ADR-0259). A laptop's
+        # turn end never starts the CLI.
+        for group in document["hooks"]["Stop"]:
+            for hook in group["hooks"]:
+                self.assertIn("policy_hook.sh\" --without-transcript admit", hook["command"])
 
     def test_admission_reaches_every_tool_a_stacktrace_rule_can_block(self) -> None:
         # The built-in tools whose class a blockable Stacktrace rule reads:
@@ -368,8 +375,13 @@ class PluginContractTests(unittest.TestCase):
         # agent made itself, such as a file it wrote, brings no outside text.
         document = json.loads((ROOT / "hooks" / "hooks.json").read_text(encoding="utf-8"))
         # A failed call's text can carry a mark too, so failures match alike.
-        self.assertEqual(document["hooks"]["PostToolUseFailure"], document["hooks"]["PostToolUse"])
-        (group,) = document["hooks"]["PostToolUse"]
+        marking, journal_only = document["hooks"]["PostToolUse"]
+        self.assertEqual(document["hooks"]["PostToolUseFailure"], [marking])
+        # The write tools' results reach the CLI only for the journal of an
+        # agent that keeps no transcript (stacktrace ADR-0259).
+        self.assertEqual(journal_only["matcher"], "^(Write|Edit|MultiEdit|NotebookEdit)$")
+        self.assertIn("--without-transcript admit", journal_only["hooks"][0]["command"])
+        group = marking
         self.assertEqual(group["hooks"][0]["onFailure"], "continue")
         matcher = re.compile(group["matcher"])
         for tool in ("mcp__github__get_issue", "Read", "Grep", "Glob", "Bash", "Monitor", "WebFetch", "WebSearch", "Agent", "Task", "TaskOutput", "SubagentHandback", "ReadMcpResourceTool", "ListMcpResourcesTool", "LSP"):
