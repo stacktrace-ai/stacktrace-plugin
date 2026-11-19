@@ -6,7 +6,7 @@ date: 2026-09-23
 supersedes: null
 superseded-by: null
 amends: 0007
-amended-by: 0009
+amended-by: [0009, 0014]
 ---
 
 Subsystem: the agent plugin. Amends ADR-0007 by removing the configure skill,
