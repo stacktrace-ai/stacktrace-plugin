@@ -4,7 +4,7 @@
 #
 # `--without-transcript` first: forward the event only when the payload names
 # no transcript, as in a Cowork VM, where the CLI journals it (stacktrace
-# ADR-0259). Anywhere else this exits before the CLI starts.
+# ADR-0260). Anywhere else this exits before the CLI starts.
 input=''
 if [ "${1:-}" = --without-transcript ]; then
   shift

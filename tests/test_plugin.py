@@ -345,7 +345,7 @@ class PluginContractTests(unittest.TestCase):
             {"SessionStart", "PreToolUse", "PostToolUse", "PostToolUseFailure", "UserPromptExpansion", "UserPromptSubmit", "Stop"},
         )
         # `Stop` reaches the CLI only where the agent keeps no transcript, as
-        # in a Cowork VM, for its journal (stacktrace ADR-0259). A laptop's
+        # in a Cowork VM, for its journal (stacktrace ADR-0260). A laptop's
         # turn end never starts the CLI.
         for group in document["hooks"]["Stop"]:
             for hook in group["hooks"]:
@@ -378,7 +378,7 @@ class PluginContractTests(unittest.TestCase):
         marking, journal_only = document["hooks"]["PostToolUse"]
         self.assertEqual(document["hooks"]["PostToolUseFailure"], [marking])
         # The write tools' results reach the CLI only for the journal of an
-        # agent that keeps no transcript (stacktrace ADR-0259).
+        # agent that keeps no transcript (stacktrace ADR-0260).
         self.assertEqual(journal_only["matcher"], "^(Write|Edit|MultiEdit|NotebookEdit)$")
         self.assertIn("--without-transcript admit", journal_only["hooks"][0]["command"])
         group = marking

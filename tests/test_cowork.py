@@ -1,6 +1,6 @@
 """In a Cowork VM, session start installs the CLI and enrolls (ADR-0014), and
 the journal-only events reach the CLI only without a transcript (stacktrace
-ADR-0259)."""
+ADR-0260)."""
 
 from __future__ import annotations
 
