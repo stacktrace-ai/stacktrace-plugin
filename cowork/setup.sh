@@ -39,7 +39,7 @@ log="$state/cowork-setup.log"
 configured="$state/cowork-configured"
 cli="${HOME:-/root}/.local/bin/stacktrace"
 socket=${STACKTRACE_DAEMON_SOCKET:-/tmp/stacktrace-$(id -u 2>/dev/null || echo 0)/daemon-v1.sock}
-COWORK_CLI='stacktrace-cli==0.26.0'
+COWORK_CLI='stacktrace-cli==0.27.0'
 FAILURE_SECONDS=300
 POLICY_SECONDS=${STACKTRACE_COWORK_POLICY_SECONDS:-30}
 STALE_LOCK_MINUTES=3
