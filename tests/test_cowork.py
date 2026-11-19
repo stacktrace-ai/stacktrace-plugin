@@ -134,6 +134,11 @@ class FakeDaemon:
                     pass
 
     def close(self) -> None:
+        # On Linux, `close` alone leaves a thread in `accept` serving.
+        try:
+            self.listener.shutdown(socket.SHUT_RDWR)
+        except OSError:
+            pass
         self.listener.close()
 
 
