@@ -22,6 +22,10 @@ JOURNAL_ONLY = {
 }
 
 
+#: The events whose hook decides, and so may wait for Cowork's setup.
+DECIDING = ("PreToolUse", "UserPromptExpansion", "UserPromptSubmit")
+
+
 def fail(message: str) -> NoReturn:
     print(f"error: {message}", file=sys.stderr)
     raise SystemExit(1)
@@ -180,7 +184,9 @@ def main() -> int:
             "hooks": [{
                 "type": "command",
                 "command": 'sh "${CLAUDE_PLUGIN_ROOT}/scripts/policy_hook.sh" admit 2>/dev/null || true',
-                "timeout": 5,
+                # A hook that decides may wait for Cowork's setup, at most 50 s
+                # (ADR-0014). Elsewhere it answers at once.
+                "timeout": 60 if event in DECIDING else 5,
                 "onFailure": "continue",
             }],
         }
@@ -208,6 +214,8 @@ def main() -> int:
 
     if not (ROOT / "scripts" / "policy_hook.sh").is_file():
         fail("scripts/policy_hook.sh must normalize failed CLI exits")
+    if not (ROOT / "scripts" / "cowork_setup.sh").is_file():
+        fail("scripts/cowork_setup.sh must make a Cowork VM ready for each boot")
 
     expected_skills = {"findings", "status"}
     skills_root = ROOT / "skills"

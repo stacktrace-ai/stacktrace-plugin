@@ -5,6 +5,16 @@
 # `--without-transcript` first: forward the event only when the payload names
 # no transcript, as in a Cowork VM, where the CLI journals it (stacktrace
 # ADR-0260). Anywhere else this exits before the CLI starts.
+#
+# In a Claude Cowork VM, the CLI and the daemon may not be ready: Cowork runs
+# the first prompt's hooks before SessionStart ends, and a VM restart stops the
+# daemon. A hook that decides waits for `cowork_setup.sh` first. A journal-only
+# hook starts it and does not wait; the journal needs no daemon.
+if [ "${CLAUDE_CODE_ENTRYPOINT:-}" = remote_cowork ]; then
+  cowork_wait=50
+  [ "${1:-}" = --without-transcript ] && cowork_wait=0
+  sh "$(dirname -- "$0")/cowork_setup.sh" "$cowork_wait" </dev/null >/dev/null 2>&1 || true
+fi
 input=''
 if [ "${1:-}" = --without-transcript ]; then
   shift

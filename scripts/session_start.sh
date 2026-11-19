@@ -79,40 +79,21 @@ log() {
 }
 
 # Claude Cowork runs each task in a new cloud VM where nothing installs the CLI
-# and no setting can hold a token (ADR-0014). There, and only there, install
-# the CLI and take the token from the zip's `cowork/enroll.env`. Every other
-# host installs nothing (ADR-0008). The release pins the version.
-COWORK_CLI='stacktrace-cli==0.26.0'
+# and no setting can hold a token (ADR-0014). There, and only there,
+# `cowork_setup.sh` installs the CLI, takes the token from the zip's
+# `cowork/enroll.env` and starts the daemon, once for each boot. The deciding
+# hooks call it too, because Cowork runs them before this hook ends. Every
+# other host installs nothing (ADR-0008).
 cowork_notice=''
 if [ "$agent_kind" = claude-code ] && [ "${CLAUDE_CODE_ENTRYPOINT:-}" = remote_cowork ]; then
-  plugin_root=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
-  cli_wheel=''
-  if [ -r "$plugin_root/cowork/enroll.env" ]; then
-    # Known names only, and only a plain value: no space, quote or `$`.
-    while IFS='=' read -r name value || [ -n "$name" ]; do
-      case $value in ''|*[!A-Za-z0-9._:/@+-]*) continue ;; esac
-      case $name in
-        STACKTRACE_REMOTE_TOKEN) STACKTRACE_REMOTE_TOKEN=$value; export STACKTRACE_REMOTE_TOKEN ;;
-        STACKTRACE_REMOTE_API_URL) STACKTRACE_REMOTE_API_URL=$value; export STACKTRACE_REMOTE_API_URL ;;
-        STACKTRACE_CLI_WHEEL) case $value in */*|.*) ;; *) cli_wheel="$plugin_root/cowork/$value" ;; esac ;;
-      esac
-    done <"$plugin_root/cowork/enroll.env"
-  fi
-  if [ ! -x "${HOME:-}/.local/bin/stacktrace" ]; then
-    spec=$COWORK_CLI
-    [ -n "$cli_wheel" ] && [ -r "$cli_wheel" ] && spec=$cli_wheel
-    if ! uv tool install --quiet "$spec" </dev/null >/dev/null 2>&1; then
-      log cowork-install-failed
-      cowork_notice=1
-    fi
-  fi
-  if [ -z "$cowork_notice" ] && ! curl -s -o /dev/null -m 5 "${STACKTRACE_REMOTE_API_URL:-https://api.stacktrace.ai}/" </dev/null >/dev/null 2>&1; then
-    log cowork-api-unreachable
-    cowork_notice=1
-  fi
-  # The VM starts with no daemon, and the CLI waits up to 20 s for it before
-  # the first prompt is checked. Give that wait room inside the 60 s hook.
-  [ -n "${STACKTRACE_ADAPTER_CALL_TIMEOUT:-}" ] || ADAPTER_CALL_TIMEOUT=25
+  cowork_status=0
+  sh "$(dirname -- "$0")/cowork_setup.sh" 50 </dev/null >/dev/null 2>&1 || cowork_status=$?
+  case $cowork_status in
+    0) ;;
+    3) log cowork-install-failed; cowork_notice=1 ;;
+    4) log cowork-api-unreachable; cowork_notice=1 ;;
+    *) log cowork-not-ready "$cowork_status" ;;
+  esac
 fi
 
 # A root installer switches to the target user and installs into this directory.

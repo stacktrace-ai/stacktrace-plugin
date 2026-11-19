@@ -768,7 +768,8 @@ class PolicyHookContractTests(unittest.TestCase):
             handler = document["hooks"][event][0]["hooks"][0]
             self.assertNotIn("async", handler)
             self.assertEqual(handler["onFailure"], "continue")
-            self.assertLessEqual(handler["timeout"], 5)
+            # Bounded, and long enough for a Cowork VM's setup (ADR-0014).
+            self.assertLessEqual(handler["timeout"], 60)
             self.assertEqual(handler["command"], 'sh "${CLAUDE_PLUGIN_ROOT}/scripts/policy_hook.sh" admit 2>/dev/null || true')
 
     def test_session_start_has_one_guarded_entrypoint(self):

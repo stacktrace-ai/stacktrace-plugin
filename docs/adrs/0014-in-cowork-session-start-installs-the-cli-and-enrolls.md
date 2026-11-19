@@ -23,29 +23,48 @@ setup mechanism provisions it. In Cowork, the plugin is the only mechanism.
 
 ## Decision
 
-1. When `CLAUDE_CODE_ENTRYPOINT=remote_cowork`, `session_start.sh` installs
-   the CLI with `uv tool install` if `$HOME/.local/bin/stacktrace` is absent.
-   It installs the wheel that the zip carries, else the version the plugin
-   pins on PyPI. On every other host the script installs nothing, as ADR-0008
-   says.
-2. In Cowork, the script reads `cowork/enroll.env` from the plugin root. It
-   takes only `STACKTRACE_REMOTE_TOKEN`, `STACKTRACE_REMOTE_API_URL` and
-   `STACKTRACE_CLI_WHEEL`, and only plain values. It exports the first two for
-   the CLI's registration, which enrolls and starts the daemon.
-3. `scripts/build_cowork_zip.sh` builds the zip with that file.
-4. The Claude Code SessionStart hook has a timeout of 60 seconds, so the
-   install can finish. Codex, Cursor and Devin keep fifteen seconds.
-5. In Cowork, when the install fails or the API does not answer, the script
-   shows one line that names the organization's network setting. The task
-   continues.
+1. When `CLAUDE_CODE_ENTRYPOINT=remote_cowork`, `scripts/cowork_setup.sh`
+   makes the VM ready once for each boot. It installs the CLI with
+   `uv tool install` if `$HOME/.local/bin/stacktrace` is absent: the wheel
+   that the zip carries, else the version the plugin pins on PyPI. It enrolls,
+   starts the daemon, and marks the boot ready only when the daemon holds the
+   organization's policy. The kernel's `boot_id` names the boot. On every
+   other host nothing installs, as ADR-0008 says.
+2. The setup reads `cowork/enroll.env` from the plugin root. It takes only
+   `STACKTRACE_REMOTE_TOKEN`, `STACKTRACE_REMOTE_API_URL` and
+   `STACKTRACE_CLI_WHEEL`, and only plain values.
+3. Session start and every hook that decides (`PreToolUse`,
+   `UserPromptSubmit`, `UserPromptExpansion`) call the setup before they
+   answer, and wait for it at most 50 seconds. The setup runs once, under a
+   lock, in its own session, so a hook that times out does not stop it. A
+   journal-only hook starts it and does not wait. A failure is kept for its
+   boot for five minutes, so later hooks do not wait on it again.
+4. The SessionStart hook and the deciding hooks have a timeout of 60 seconds.
+   Elsewhere they answer at once, so the longer limit matters only if the CLI
+   stops answering. Codex, Cursor and Devin keep their limits.
+5. `scripts/build_cowork_zip.sh` builds the zip with `enroll.env`.
+6. In Cowork, when the install fails or the API does not answer, session
+   start shows one line that names the organization's network setting. The
+   task continues.
 
 Every other decision in ADR-0008 and ADR-0013 stays.
 
 ## Alternatives considered
 
+- **Set up in SessionStart only.** Rejected: Cowork runs the first prompt's
+  hooks while SessionStart still runs. Claude Code's hook reference says
+  that SessionStart hooks run in the background, and a probe in a Cowork VM
+  saw `UserPromptSubmit` before `SessionStart`. Cowork also restarts the VM
+  about four minutes into a task, which stops the daemon. Live tasks showed a
+  token prompt and a token write go through in both windows.
 - **Install the CLI in the background and return at once.** Rejected: the
   first prompt and its tool calls would run before the CLI exists, and so
   without policy.
+- **Deny every action until the boot is ready.** Rejected: Cowork shows
+  nothing for a blocked prompt, so the person's first message would vanish.
+  A wait keeps the message and checks it.
+- **Ready when the daemon answers.** Rejected: a daemon answers before it
+  has the policy, and until then it allows every action.
 - **Install from `stacktrace.ai/install.sh`.** Rejected: the installer gets
   `uv` from `astral.sh`, which a Cowork VM with "Package managers only" cannot
   reach. The VM already has `uv`, and PyPI is a package manager.
@@ -60,8 +79,11 @@ Every other decision in ADR-0008 and ADR-0013 stays.
 - The zip holds an organization token. Anthropic stores the zip, and each
   task's VM gets a copy. An Owner rotates the token when a member who had the
   zip leaves.
-- Each new Cowork task spends the install time once. A resumed task finds
-  the CLI on its disk.
+- The first message of a new Cowork task waits for the setup, a few
+  seconds to tens of seconds. After a VM restart, the first deciding hook
+  waits for the daemon. A resumed task finds the CLI on its disk.
+- If the daemon stops with no restart, the next boot check does not see it.
+  Hooks allow every action until the next restart.
 - A pinned version moves only with a plugin release.
 
 ## When to revisit
