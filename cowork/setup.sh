@@ -44,13 +44,23 @@ FAILURE_SECONDS=300
 POLICY_SECONDS=${STACKTRACE_COWORK_POLICY_SECONDS:-30}
 STALE_LOCK_MINUTES=3
 
-now() { date +%s; }
-
-# Milliseconds since the epoch: GNU date in the VM, else python3, else seconds.
-ms() {
-  t=$(date +%s%3N 2>/dev/null)
-  case $t in ''|*[!0-9]*) t=$(python3 -I -S -c 'import time; print(int(time.time() * 1000))' 2>/dev/null) ;; esac
-  case $t in ''|*[!0-9]*) t=$(($(now) * 1000)) ;; esac
+# Milliseconds on a clock that does not step: the kernel's uptime in the VM,
+# else python3's monotonic clock. A VM that syncs its time steps the wall
+# clock, which would make a live lock look stale or a step take negative time.
+# Each value is for this boot only, as the lock and the failure are.
+clock() {
+  if [ -r /proc/uptime ] && read -r up _ </proc/uptime; then
+    whole=${up%.*}
+    part=${up#*.}
+    part=${part#0}
+    case $whole${part:-0} in
+      *[!0-9]*) ;;
+      *) echo $((whole * 1000 + ${part:-0} * 10)); return ;;
+    esac
+  fi
+  # Not time.monotonic(): on macOS it counts from each process's start.
+  t=$(python3 -I -S -c 'import time; print(int(time.clock_gettime(time.CLOCK_MONOTONIC) * 1000))' 2>/dev/null)
+  case $t in ''|*[!0-9]*) t=$(($(date +%s) * 1000)) ;; esac
   echo "$t"
 }
 
@@ -110,8 +120,8 @@ sys.exit(1)
 ' "$socket" "$1" </dev/null >/dev/null 2>&1
     return
   fi
-  deadline=$(($(now) + $1))
-  while [ "$(now)" -lt "$deadline" ]; do
+  deadline=$(($(clock) + $1 * 1000))
+  while [ "$(clock)" -lt "$deadline" ]; do
     bounded 10 "$cli" remote policy hooks status --agent-kind claude-code </dev/null 2>/dev/null |
       grep -Eq '"desired_revision": [0-9]+' && return 0
     sleep 0.2 2>/dev/null || sleep 1
@@ -133,7 +143,7 @@ outcome() {
   [ -r "$failed" ] || return 0
   read -r f_boot f_code f_at <"$failed" 2>/dev/null || return 0
   case ${f_code:-}${f_at:-} in ''|*[!0-9]*) return 0 ;; esac
-  if [ "$f_boot" = "$boot" ] && [ $(($(now) - f_at)) -lt "$FAILURE_SECONDS" ]; then
+  if [ "$f_boot" = "$boot" ] && [ $(($(clock) - f_at)) -lt $((FAILURE_SECONDS * 1000)) ]; then
     echo "$f_code"
   fi
 }
@@ -144,23 +154,28 @@ clear_stale_lock() {
     [ -d "$old" ] && [ "$old" != "$lock" ] && rm -rf "$old"
   done
   [ -d "$lock" ] || return 0
-  pid=$(cat "$lock/pid" 2>/dev/null || true)
+  pid='' at=''
+  read -r pid at <"$lock/pid" 2>/dev/null || true
   case $pid in
     ''|*[!0-9]*) ;;
     *) kill -0 "$pid" 2>/dev/null || { rm -rf "$lock"; note stale-lock 0; return 0; } ;;
   esac
-  if [ -n "$(find "$lock" -maxdepth 0 -mmin +"$STALE_LOCK_MINUTES" 2>/dev/null)" ]; then
-    rm -rf "$lock"
-    note stale-lock 1
-  fi
+  case $at in
+    ''|*[!0-9]*)
+      # No start time yet, or a setup that stopped before it wrote one.
+      [ -n "$(find "$lock" -maxdepth 0 -mmin +"$STALE_LOCK_MINUTES" 2>/dev/null)" ] || return 0 ;;
+    *) [ $(($(clock) - at)) -gt $((STALE_LOCK_MINUTES * 60000)) ] || return 0 ;;
+  esac
+  rm -rf "$lock"
+  note stale-lock 1
 }
 
 run() {
   mkdir "$lock" 2>/dev/null || exit 0
-  echo $$ >"$lock/pid"
+  echo "$$ $(clock)" >"$lock/pid"
   trap 'rm -rf "$lock"' EXIT
   trap 'exit 1' HUP INT TERM
-  started=$(ms)
+  started=$(clock)
   code=0
   cli_wheel=''
   if [ -r "$plugin_root/cowork/enroll.env" ]; then
@@ -175,11 +190,11 @@ run() {
     done <"$plugin_root/cowork/enroll.env"
   fi
   if [ ! -x "$cli" ]; then
-    step=$(ms)
+    step=$(clock)
     spec=$COWORK_CLI
     [ -n "$cli_wheel" ] && [ -r "$cli_wheel" ] && spec=$cli_wheel
     if bounded 120 uv tool install --quiet --compile-bytecode "$spec" </dev/null >/dev/null 2>&1 && [ -x "$cli" ]; then
-      note install $(($(ms) - step))
+      note install $(($(clock) - step))
     else
       code=3
     fi
@@ -199,11 +214,11 @@ run() {
     # `enroll.env`, the one source of the token.
     if [ -n "${STACKTRACE_REMOTE_TOKEN:-}" ] &&
       { [ ! -f "$configured" ] || [ "$plugin_root/cowork/enroll.env" -nt "$configured" ]; }; then
-      step=$(ms)
+      step=$(clock)
       bounded 60 "$cli" remote configure </dev/null >/dev/null 2>&1 && : >"$configured"
-      note configure $(($(ms) - step))
+      note configure $(($(clock) - step))
     fi
-    step=$(ms)
+    step=$(clock)
     if ! daemon_up; then
       if command -v setsid >/dev/null 2>&1; then
         setsid "$cli" daemon start --no-reasoning </dev/null >>"$state/daemon.log" 2>&1 &
@@ -212,7 +227,7 @@ run() {
       fi
     fi
     if policy_held "$POLICY_SECONDS"; then
-      note policy $(($(ms) - step))
+      note policy $(($(clock) - step))
       # Record the project with the daemon, as the CLI's own session start
       # does. Prompts and built-in tools need no record, so nothing waits.
       printf '%s\n' '{"hook_event_name":"SessionStart","source":"startup","session_id":"","transcript_path":""}' |
@@ -224,9 +239,9 @@ run() {
   if [ "$code" = 0 ]; then
     printf '%s\n' "$boot" >"$ready"
     rm -f "$failed"
-    note ready $(($(ms) - started))
+    note ready $(($(clock) - started))
   else
-    printf '%s %s %s\n' "$boot" "$code" "$(now)" >"$failed"
+    printf '%s %s %s\n' "$boot" "$code" "$(clock)" >"$failed"
     note failed "$code"
   fi
 }
@@ -251,10 +266,10 @@ if [ ! -d "$lock" ]; then
     sh "$here/setup.sh" --run </dev/null >/dev/null 2>&1 &
   fi
 fi
-deadline=$(($(now) + wait_seconds))
+deadline=$(($(clock) + wait_seconds * 1000))
 while :; do
   result=$(outcome)
   [ -z "$result" ] || exit "$result"
-  [ "$(now)" -lt "$deadline" ] || exit 1
+  [ "$(clock)" -lt "$deadline" ] || exit 1
   sleep 0.2 2>/dev/null || sleep 1
 done

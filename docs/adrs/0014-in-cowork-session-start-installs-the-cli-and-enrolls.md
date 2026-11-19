@@ -63,7 +63,10 @@ through in both windows.
 7. One setup runs at a time for each boot. It runs in its own session, so a
    hook that times out does not stop it. A lock from an earlier boot, or from
    a setup that stopped, does not hold the boot back. A failure is kept for
-   its boot for five minutes, so later hooks do not wait on it again.
+   its boot for five minutes, so later hooks do not wait on it again. The
+   age of a lock, these five minutes and each wait use a clock that does not
+   step: the kernel's uptime in the VM. A VM that syncs its time steps the
+   wall clock, and a live lock must not look stale.
 8. The setup writes one line for each step to `cowork-setup.log` in the
    state folder: the time, the boot, the step and its milliseconds or code.
    The steps are `install`, `configure`, `policy` and `ready`. It never

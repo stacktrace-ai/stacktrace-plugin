@@ -107,6 +107,15 @@ class SeparationTests(unittest.TestCase):
         self.assertLessEqual(wait + 15, session["timeout"])
 
 
+def clock_ms() -> int:
+    """`clock` in `cowork/setup.sh`: the kernel's uptime, else CLOCK_MONOTONIC."""
+    try:
+        whole, part = Path("/proc/uptime").read_text().split()[0].split(".")
+        return int(whole) * 1000 + int(part) * 10
+    except OSError:
+        return int(time.clock_gettime(time.CLOCK_MONOTONIC) * 1000)
+
+
 class FakeDaemon:
     """A daemon socket that answers `policy_status` with `STUB_REVISION`."""
 
@@ -447,6 +456,28 @@ class CoworkVmTests(unittest.TestCase):
 
         self.assertEqual(self.ready(), "boot-a")
         self.assertFalse(lock.exists())
+
+    def test_a_setup_that_runs_holds_the_boot_for_itself(self) -> None:
+        # Another hook's setup holds the lock and runs: this hook starts none.
+        lock = self.state("cowork-setup-boot-a.lock")
+        lock.mkdir(parents=True)
+        (lock / "pid").write_text(f"{os.getpid()} {clock_ms()}\n")
+
+        self.run_hook(wait=1)
+
+        self.assertEqual(self.installs(), [])
+        self.assertTrue(lock.exists())
+
+    def test_a_setup_that_hangs_past_three_minutes_does_not_hold_the_boot_back(self) -> None:
+        # Measured on the clock that does not step, never the wall clock.
+        lock = self.state("cowork-setup-boot-a.lock")
+        lock.mkdir(parents=True)
+        (lock / "pid").write_text(f"{os.getpid()} {clock_ms() - 181_000}\n")
+
+        self.assertEqual(self.run_hook(), 0)
+
+        self.assertEqual(self.ready(), "boot-a")
+        self.assertIn("stale-lock 1", self.state("cowork-setup.log").read_text())
 
     def test_a_lock_from_an_earlier_boot_does_not_hold_the_boot_back(self) -> None:
         old = self.state("cowork-setup-boot-old.lock")
