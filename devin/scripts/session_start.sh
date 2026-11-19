@@ -78,24 +78,6 @@ log() {
   ) </dev/null >/dev/null 2>&1 || true
 }
 
-# Claude Cowork runs each task in a new cloud VM where nothing installs the CLI
-# and no setting can hold a token (ADR-0014). There, and only there,
-# `cowork_setup.sh` installs the CLI, takes the token from the zip's
-# `cowork/enroll.env` and starts the daemon, once for each boot. The deciding
-# hooks call it too, because Cowork runs them before this hook ends. Every
-# other host installs nothing (ADR-0008).
-cowork_notice=''
-if [ "$agent_kind" = claude-code ] && [ "${CLAUDE_CODE_ENTRYPOINT:-}" = remote_cowork ]; then
-  cowork_status=0
-  sh "$(dirname -- "$0")/cowork_setup.sh" 50 </dev/null >/dev/null 2>&1 || cowork_status=$?
-  case $cowork_status in
-    0) ;;
-    3) log cowork-install-failed; cowork_notice=1 ;;
-    4) log cowork-api-unreachable; cowork_notice=1 ;;
-    *) log cowork-not-ready "$cowork_status" ;;
-  esac
-fi
-
 # A root installer switches to the target user and installs into this directory.
 # Claude can inherit PATH before uv updates the shell profile.
 if [ -n "${VIRTUAL_ENV:-}" ] && [ -x "$VIRTUAL_ENV/bin/stacktrace" ]; then
@@ -243,10 +225,6 @@ diagnose() {
 }
 
 notices=$(diagnose | escape) || notices=''
-if [ -n "$cowork_notice" ]; then
-  # One line in place of the host's own: the fix is the organization's.
-  notices=$(echo "Stacktrace is not connected in this Cowork task, so it does not check this task's actions. Ask an Owner to allow api.stacktrace.ai and stacktrace.ai in Organization settings > Capabilities > Code execution." | escape)
-fi
 
 if [ "$agent_kind" = codex ]; then
   if [ -n "$notices" ]; then

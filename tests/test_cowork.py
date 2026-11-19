@@ -1,15 +1,18 @@
-"""In a Cowork VM, session start installs the CLI and enrolls (ADR-0014), and
-the journal-only events reach the CLI only without a transcript (stacktrace
-ADR-0260)."""
+"""The Cowork zip (ADR-0014): its hooks make each boot ready, then run the
+plugin's own scripts. The plugin's own hooks and scripts never call it."""
 
 from __future__ import annotations
 
+import copy
 import json
 import os
 import shutil
+import socket
 import subprocess
 import tempfile
+import time
 import unittest
+import zipfile
 from pathlib import Path
 
 from test_plugin import Stubs, isolated
@@ -18,6 +21,9 @@ ROOT = Path(__file__).resolve().parents[1]
 #: A token in the shape of a real one, made up for these tests.
 TOKEN = "stk_test_4f0c7a8e1b2c4d3e8f90"
 PIN = "stacktrace-cli==0.26.0"
+DECIDING = ("PreToolUse", "UserPromptExpansion", "UserPromptSubmit")
+#: The Cowork zip's own files. Each hook in it calls one of the two wrappers.
+COWORK_FILES = ("hooks.json", "setup.sh", "session_start.sh", "policy_hook.sh")
 
 CLI = """#!/bin/sh
 echo "cli $* token=${STACKTRACE_REMOTE_TOKEN:-none} api=${STACKTRACE_REMOTE_API_URL:-none}" >>"$STUB_LOG"
@@ -26,7 +32,8 @@ case "$1" in
   telemetry) echo off ;;
   remote)
     case "$*" in
-      *"hooks status"*) printf '{"desired_revision": %s}\n' "${STUB_REVISION:-87}" ;;
+      *"hooks status"*) printf '{"desired_revision": %s}\\n' "${STUB_REVISION:-87}" ;;
+      *"hooks admit"*) echo "stdin $(cat)" >>"$STUB_LOG" ;;
       *) cat >/dev/null ;;
     esac ;;
 esac
@@ -34,29 +41,100 @@ exit 0
 """
 
 
-class CoworkSessionStartTests(unittest.TestCase):
+def cowork_hooks_from(main: dict[str, object]) -> dict[str, object]:
+    """What `cowork/hooks.json` must be for the plugin's own `hooks.json`."""
+
+    def handler(command: str, timeout: int) -> dict[str, object]:
+        return {"type": "command", "command": command, "timeout": timeout, "onFailure": "continue"}
+
+    def policy(wait: int, timeout: int) -> dict[str, object]:
+        return handler(f'sh "${{CLAUDE_PLUGIN_ROOT}}/cowork/policy_hook.sh" {wait} admit 2>/dev/null || true', timeout)
+
+    hooks: dict[str, list[dict[str, object]]] = {}
+    for event, groups in main["hooks"].items():  # type: ignore[union-attr]
+        hooks[event] = []
+        for group in groups:
+            group = copy.deepcopy(group)
+            if event == "SessionStart":
+                group["hooks"] = [handler('sh "${CLAUDE_PLUGIN_ROOT}/cowork/session_start.sh" --agent-kind claude-code 2>/dev/null || true', 60)]
+            elif event in DECIDING:
+                # A hook that decides waits for the boot, at most 50 seconds.
+                group["hooks"] = [policy(50, 60)]
+            else:
+                group["hooks"] = [policy(0, group["hooks"][0]["timeout"])]
+            hooks[event].append(group)
+    # A Cowork VM keeps no transcript, so the CLI journals the turn from these
+    # (stacktrace ADR-0260).
+    hooks["PostToolUse"].append({"hooks": [policy(0, 5)], "matcher": "^(Write|Edit|MultiEdit|NotebookEdit)$"})
+    hooks["Stop"] = [{"hooks": [policy(0, 5)]}]
+    return hooks
+
+
+class SeparationTests(unittest.TestCase):
+    """The plugin's own hooks and scripts are the same for every host."""
+
+    def test_the_plugins_own_hooks_and_scripts_never_reach_the_cowork_folder(self) -> None:
+        own = [ROOT / "hooks/hooks.json", *sorted((ROOT / "scripts").glob("*.sh")), *sorted((ROOT / "devin").rglob("*"))]
+        for path in own:
+            if path.is_file() and path.name != "build_cowork_zip.sh":
+                with self.subTest(path=path.relative_to(ROOT)):
+                    text = path.read_text(encoding="utf-8")
+                    self.assertNotIn("cowork", text.lower())
+
+    def test_the_cowork_hooks_are_the_plugins_own_after_the_boot_setup(self) -> None:
+        # A hook added to the plugin fails here until the Cowork zip has it too.
+        main = json.loads((ROOT / "hooks/hooks.json").read_text(encoding="utf-8"))
+        cowork = json.loads((ROOT / "cowork/hooks.json").read_text(encoding="utf-8"))
+
+        self.assertEqual(cowork["hooks"], cowork_hooks_from(main))
+
+    def test_every_cowork_hook_answers_within_its_timeout(self) -> None:
+        cowork = json.loads((ROOT / "cowork/hooks.json").read_text(encoding="utf-8"))
+        for event, groups in cowork["hooks"].items():
+            for group in groups:
+                for hook in group["hooks"]:
+                    with self.subTest(event=event):
+                        self.assertEqual(hook["onFailure"], "continue")
+                        if " 50 admit" in hook["command"]:
+                            self.assertGreaterEqual(hook["timeout"], 60)
+        session = cowork["hooks"]["SessionStart"][0]["hooks"][0]
+        wait = int((ROOT / "cowork/session_start.sh").read_text().split('setup.sh" ')[1].split()[0])
+        # The wait, then the plugin's own session start with its own limit.
+        self.assertLessEqual(wait + 15, session["timeout"])
+
+
+class CoworkVmTests(unittest.TestCase):
     def setUp(self) -> None:
         self.stubs = Stubs()
         self.home = tempfile.TemporaryDirectory()
         self.plugin = tempfile.TemporaryDirectory()
-        self.extra = tempfile.TemporaryDirectory()
+        self.extra = tempfile.TemporaryDirectory(dir="/tmp")
         shutil.copytree(ROOT / "scripts", Path(self.plugin.name, "scripts"))
+        Path(self.plugin.name, "cowork").mkdir()
+        for name in COWORK_FILES:
+            shutil.copy(ROOT / "cowork" / name, Path(self.plugin.name, "cowork", name))
         self.log = Path(self.extra.name, "calls.log")
         self.log.write_text("")
         tools = Path(self.extra.name, "bin")
         tools.mkdir()
-        for name in ("cat", "chmod", "grep", "rmdir", "find"):
+        for name in ("cat", "chmod", "grep", "find", "python3"):
             (tools / name).symlink_to(shutil.which(name))  # type: ignore[arg-type]
         self.tools = tools
         self.uv(install="ok")
         self.curl(exit_code=0)
         self.boot = "boot-a"
+        # A daemon that answers on its socket.
+        self.socket = Path(self.extra.name, "d.sock")
+        self.daemon = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        self.daemon.bind(str(self.socket))
+        self.daemon.listen(64)
 
     def tearDown(self) -> None:
+        self.daemon.close()
         for directory in (self.stubs, self.home, self.plugin, self.extra):
             directory.cleanup()
 
-    def uv(self, install: str) -> None:
+    def uv(self, install: str, delay: int = 0) -> None:
         """A `uv` that records its arguments and, on `ok`, installs the CLI stub."""
         body = (
             'mkdir -p "$HOME/.local/bin"\n'
@@ -66,7 +144,7 @@ class CoworkSessionStartTests(unittest.TestCase):
             else "exit 1\n"
         )
         path = self.tools / "uv"
-        path.write_text(f'#!/bin/sh\necho "uv $*" >>"$STUB_LOG"\n{body}')
+        path.write_text(f'#!/bin/sh\necho "uv $*" >>"$STUB_LOG"\nsleep {delay}\n{body}')
         path.chmod(0o755)
 
     def curl(self, exit_code: int) -> None:
@@ -75,11 +153,9 @@ class CoworkSessionStartTests(unittest.TestCase):
         path.chmod(0o755)
 
     def enroll(self, text: str) -> None:
-        folder = Path(self.plugin.name, "cowork")
-        folder.mkdir(exist_ok=True)
-        (folder / "enroll.env").write_text(text)
+        (Path(self.plugin.name, "cowork") / "enroll.env").write_text(text)
 
-    def run_start(self, entrypoint: str = "remote_cowork") -> subprocess.CompletedProcess[str]:
+    def environment(self, entrypoint: str = "remote_cowork") -> dict[str, str]:
         env = isolated(self.home.name, self.stubs, cli=False, daemon=True)
         env["PATH"] = os.pathsep.join([str(self.tools), env["PATH"]])
         env.update(
@@ -87,51 +163,71 @@ class CoworkSessionStartTests(unittest.TestCase):
             CLAUDE_CODE_REMOTE="true",
             STUB_LOG=str(self.log),
             STACKTRACE_BOOT_ID=self.boot,
+            STACKTRACE_DAEMON_SOCKET=str(self.socket),
         )
+        return env
+
+    def run_start(self, entrypoint: str = "remote_cowork") -> subprocess.CompletedProcess[str]:
         return subprocess.run(
-            ["sh", str(Path(self.plugin.name, "scripts/session_start.sh")), "--agent-kind", "claude-code"],
+            ["sh", str(Path(self.plugin.name, "cowork/session_start.sh")), "--agent-kind", "claude-code"],
             input=json.dumps({"hook_event_name": "SessionStart", "source": "startup"}),
-            capture_output=True, text=True, check=False, env=env,
+            capture_output=True, text=True, check=False, env=self.environment(entrypoint),
         )
+
+    def hook(self, wait: int = 50, entrypoint: str = "remote_cowork") -> subprocess.Popen[str]:
+        """A hook started now. It reads its input after this boot's setup."""
+        return subprocess.Popen(
+            ["sh", str(Path(self.plugin.name, "cowork/policy_hook.sh")), str(wait), "admit"],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            env=self.environment(entrypoint),
+        )
+
+    def run_hook(self, wait: int = 50, payload: str = '{"hook_event_name":"UserPromptSubmit"}', entrypoint: str = "remote_cowork") -> int:
+        process = self.hook(wait, entrypoint)
+        process.communicate(payload, timeout=60)
+        return process.returncode
 
     def calls(self) -> list[str]:
         return self.log.read_text().splitlines()
 
-    def ready(self) -> str:
-        marker = Path(self.home.name, ".local/state/stacktrace/cowork-ready")
-        return marker.read_text().strip() if marker.exists() else ""
+    def installs(self) -> list[str]:
+        return [c for c in self.calls() if c.startswith("uv ")]
 
-    def run_hook(self, *args: str, payload: str = '{"hook_event_name":"UserPromptSubmit"}') -> subprocess.CompletedProcess[str]:
-        env = isolated(self.home.name, self.stubs, cli=False, daemon=True)
-        env["PATH"] = os.pathsep.join([str(self.tools), env["PATH"]])
-        env.update(CLAUDE_CODE_ENTRYPOINT="remote_cowork", STUB_LOG=str(self.log), STACKTRACE_BOOT_ID=self.boot)
-        return subprocess.run(
-            ["sh", str(Path(self.plugin.name, "scripts/policy_hook.sh")), *args, "admit"],
-            input=payload, capture_output=True, text=True, check=False, env=env,
-        )
+    def registers(self) -> list[str]:
+        return [c for c in self.calls() if c.startswith("cli remote policy hooks register")]
+
+    def state(self, name: str) -> Path:
+        return Path(self.home.name, ".local/state/stacktrace", name)
+
+    def ready(self) -> str:
+        marker = self.state("cowork-ready")
+        return marker.read_text().strip() if marker.exists() else ""
 
     def message(self, result: subprocess.CompletedProcess[str]) -> str:
         return str(json.loads(result.stdout).get("systemMessage", ""))
 
-    def test_a_cowork_vm_installs_the_pinned_cli_and_registers_with_the_token(self) -> None:
+    # Session start.
+
+    def test_session_start_installs_the_pinned_cli_and_registers_with_the_token(self) -> None:
         self.enroll(f"STACKTRACE_REMOTE_TOKEN={TOKEN}\n")
 
         result = self.run_start()
 
         self.assertEqual(result.returncode, 0)
         self.assertIn(f"uv tool install --quiet {PIN}", self.calls())
-        register = [c for c in self.calls() if c.startswith("cli remote policy hooks register")]
-        self.assertIn(f"cli remote policy hooks register --agent-kind claude-code token={TOKEN} api=none", register)
+        self.assertIn(f"cli remote policy hooks register --agent-kind claude-code token={TOKEN} api=none", self.registers())
+        # Then the plugin's own session start runs, with the hook's input.
+        self.assertIn("hookSpecificOutput", json.loads(result.stdout))
         self.assertNotIn("not connected", self.message(result))
         self.assertEqual(self.ready(), "boot-a")
 
     def test_the_wheel_the_zip_carries_is_installed_instead_of_the_pin(self) -> None:
         self.enroll(f"STACKTRACE_REMOTE_TOKEN={TOKEN}\nSTACKTRACE_CLI_WHEEL=stacktrace_cli-0.27.0-py3-none-any.whl\n")
-        Path(self.plugin.name, "cowork/stacktrace_cli-0.27.0-py3-none-any.whl").write_text("")
+        wheel = Path(self.plugin.name, "cowork/stacktrace_cli-0.27.0-py3-none-any.whl")
+        wheel.write_text("")
 
         self.run_start()
 
-        wheel = Path(self.plugin.name, "cowork/stacktrace_cli-0.27.0-py3-none-any.whl")
         self.assertIn(f"uv tool install --quiet {wheel}", self.calls())
 
     def test_a_wheel_name_with_a_path_is_ignored(self) -> None:
@@ -140,17 +236,6 @@ class CoworkSessionStartTests(unittest.TestCase):
         self.run_start()
 
         self.assertIn(f"uv tool install --quiet {PIN}", self.calls())
-
-    def test_an_installed_cli_is_not_installed_again(self) -> None:
-        self.uv(install="ok")
-        self.run_start()
-        first = [c for c in self.calls() if c.startswith("uv ")]
-        self.log.write_text("")
-
-        self.run_start()
-
-        self.assertEqual(len(first), 1)
-        self.assertEqual([c for c in self.calls() if c.startswith("uv ")], [])
 
     def test_only_the_known_names_with_plain_values_are_taken(self) -> None:
         self.enroll(
@@ -161,8 +246,7 @@ class CoworkSessionStartTests(unittest.TestCase):
 
         self.run_start()
 
-        register = [c for c in self.calls() if c.startswith("cli remote policy hooks register")]
-        self.assertIn("cli remote policy hooks register --agent-kind claude-code token=none api=https://api.example.net", register)
+        self.assertIn("cli remote policy hooks register --agent-kind claude-code token=none api=https://api.example.net", self.registers())
 
     def test_a_failed_install_says_so_once_and_the_task_continues(self) -> None:
         self.uv(install="fail")
@@ -174,8 +258,7 @@ class CoworkSessionStartTests(unittest.TestCase):
         self.assertEqual(message.count("Stacktrace is not connected"), 1)
         self.assertIn("Organization settings > Capabilities > Code execution", message)
         self.assertNotIn("daemon", message)
-        log = Path(self.home.name, ".local/state/stacktrace/session-start.log").read_text()
-        self.assertIn("plugin cowork-install-failed", log)
+        self.assertIn("boot-a failed 3", self.state("cowork-setup.log").read_text())
 
     def test_an_api_that_does_not_answer_says_so(self) -> None:
         self.curl(exit_code=56)
@@ -184,21 +267,37 @@ class CoworkSessionStartTests(unittest.TestCase):
 
         self.assertIn("api.stacktrace.ai", self.message(result))
 
-    def test_the_first_prompt_waits_for_setup_before_it_is_judged(self) -> None:
-        # Cowork runs the first prompt's hooks before SessionStart ends
-        # (ADR-0014), so the deciding hook sets the VM up itself.
+    # The hooks that decide.
+
+    def test_the_first_prompt_waits_for_setup_and_then_reaches_admit_with_its_payload(self) -> None:
+        # Cowork runs the first prompt's hooks before SessionStart ends.
         self.enroll(f"STACKTRACE_REMOTE_TOKEN={TOKEN}\n")
+        payload = '{"hook_event_name":"UserPromptSubmit","transcript_path":""}'
 
-        result = self.run_hook()
+        self.assertEqual(self.run_hook(payload=payload), 0)
 
-        self.assertEqual(result.returncode, 0)
         calls = self.calls()
         install = calls.index(f"uv tool install --quiet {PIN}")
         register = calls.index(f"cli remote policy hooks register --agent-kind claude-code token={TOKEN} api=none")
         admit = next(i for i, c in enumerate(calls) if c.startswith("cli remote policy hooks admit"))
         self.assertLess(install, register)
         self.assertLess(register, admit)
+        self.assertIn(f"stdin {payload}", calls)
         self.assertEqual(self.ready(), "boot-a")
+
+    def test_hooks_that_start_together_set_the_boot_up_once(self) -> None:
+        # SessionStart and the first prompt's hooks run at the same time.
+        self.uv(install="ok", delay=2)
+
+        hooks = [self.hook() for _ in range(4)]
+        for hook in hooks:
+            hook.communicate('{"hook_event_name":"UserPromptSubmit"}', timeout=60)
+        codes = [hook.returncode for hook in hooks]
+
+        self.assertEqual(codes, [0, 0, 0, 0])
+        self.assertEqual(len(self.installs()), 1)
+        self.assertEqual(len(self.registers()), 1)
+        self.assertEqual(len([c for c in self.calls() if c.startswith("stdin ")]), 4)
 
     def test_a_ready_boot_is_not_set_up_again(self) -> None:
         self.run_hook()
@@ -206,7 +305,7 @@ class CoworkSessionStartTests(unittest.TestCase):
 
         self.run_hook()
 
-        self.assertEqual([c for c in self.calls() if "register" in c or c.startswith("uv ")], [])
+        self.assertEqual(self.installs() + self.registers(), [])
 
     def test_a_restarted_vm_is_set_up_again(self) -> None:
         # A restart stops the daemon; the kernel's boot id changes with it.
@@ -216,9 +315,42 @@ class CoworkSessionStartTests(unittest.TestCase):
 
         self.run_hook()
 
-        self.assertTrue(any(c.startswith("cli remote policy hooks register") for c in self.calls()))
-        self.assertEqual([c for c in self.calls() if c.startswith("uv ")], [])
+        self.assertEqual(len(self.registers()), 1)
+        self.assertEqual(self.installs(), [])
         self.assertEqual(self.ready(), "boot-b")
+
+    def test_a_daemon_that_stops_without_a_restart_is_started_again(self) -> None:
+        self.run_hook()
+        self.log.write_text("")
+        # The socket file stays, but nothing answers on it.
+        self.daemon.close()
+
+        self.run_hook(wait=2)
+
+        self.assertEqual(len(self.registers()), 1)
+        self.assertIn("daemon-gone", self.state("cowork-setup.log").read_text())
+
+    def test_a_setup_killed_in_this_boot_does_not_hold_the_boot_back(self) -> None:
+        gone = subprocess.Popen(["true"])
+        gone.wait()
+        lock = self.state("cowork-setup-boot-a.lock")
+        lock.mkdir(parents=True)
+        (lock / "pid").write_text(f"{gone.pid}\n")
+
+        self.assertEqual(self.run_hook(), 0)
+
+        self.assertEqual(self.ready(), "boot-a")
+        self.assertFalse(lock.exists())
+
+    def test_a_lock_from_an_earlier_boot_does_not_hold_the_boot_back(self) -> None:
+        old = self.state("cowork-setup-boot-old.lock")
+        old.mkdir(parents=True)
+        (old / "pid").write_text(f"{os.getpid()}\n")
+
+        self.assertEqual(self.run_hook(), 0)
+
+        self.assertEqual(self.ready(), "boot-a")
+        self.assertFalse(old.exists())
 
     def test_a_daemon_without_the_policy_is_not_ready(self) -> None:
         # A daemon that answers but holds no policy lets every action through.
@@ -230,7 +362,7 @@ class CoworkSessionStartTests(unittest.TestCase):
         self.run_hook()
 
         self.assertEqual(self.ready(), "")
-        failed = Path(self.home.name, ".local/state/stacktrace/cowork-failed").read_text().split()
+        failed = self.state("cowork-failed").read_text().split()
         self.assertEqual(failed[:2], ["boot-a", "5"])
 
     def test_a_failed_setup_is_not_waited_on_again(self) -> None:
@@ -238,73 +370,37 @@ class CoworkSessionStartTests(unittest.TestCase):
         self.run_hook()
         self.log.write_text("")
 
+        started = time.monotonic()
         self.run_hook()
 
-        self.assertEqual([c for c in self.calls() if c.startswith("uv ")], [])
+        self.assertLess(time.monotonic() - started, 3)
+        self.assertEqual(self.installs(), [])
 
-    def test_a_journal_only_hook_starts_setup_and_does_not_wait(self) -> None:
-        slow = self.tools / "uv"
-        slow.write_text('#!/bin/sh\nsleep 4\nexit 1\n')
-        slow.chmod(0o755)
-        import time
+    def test_a_hook_that_only_reports_starts_setup_and_does_not_wait(self) -> None:
+        self.uv(install="fail", delay=4)
 
         started = time.monotonic()
-        self.run_hook("--without-transcript", payload='{"hook_event_name":"Stop","transcript_path":""}')
+        self.run_hook(wait=0, payload='{"hook_event_name":"Stop","transcript_path":""}')
 
         self.assertLess(time.monotonic() - started, 3)
 
-    def test_outside_cowork_the_plugin_installs_nothing_and_reads_no_token(self) -> None:
+    def test_outside_cowork_the_zip_installs_nothing_and_reads_no_token(self) -> None:
         self.enroll(f"STACKTRACE_REMOTE_TOKEN={TOKEN}\n")
 
         self.run_start(entrypoint="cli")
+        self.run_hook(entrypoint="cli")
 
         self.assertEqual([c for c in self.calls() if c.startswith(("uv ", "curl "))], [])
+        self.assertFalse(self.state("cowork-setup.log").exists())
 
+    def test_the_log_holds_no_token(self) -> None:
+        self.enroll(f"STACKTRACE_REMOTE_TOKEN={TOKEN}\n")
+        self.run_hook()
+        self.boot = "boot-b"
+        self.daemon.close()
+        self.run_hook(wait=2)
 
-class WithoutTranscriptTests(unittest.TestCase):
-    def setUp(self) -> None:
-        self.stubs = Stubs()
-        self.home = tempfile.TemporaryDirectory()
-        self.extra = tempfile.TemporaryDirectory()
-        self.log = Path(self.extra.name, "calls.log")
-        tools = Path(self.extra.name, "bin")
-        tools.mkdir()
-        (tools / "cat").symlink_to(shutil.which("cat"))  # type: ignore[arg-type]
-        cli = tools / "stacktrace"
-        cli.write_text('#!/bin/sh\necho "$* $(cat)" >>"$STUB_LOG"\necho \'{"decision":"block"}\'\n')
-        cli.chmod(0o755)
-        self.tools = tools
-
-    def tearDown(self) -> None:
-        for directory in (self.stubs, self.home, self.extra):
-            directory.cleanup()
-
-    def run_hook(self, payload: dict[str, object]) -> subprocess.CompletedProcess[str]:
-        env = isolated(self.home.name, self.stubs, cli=False, STUB_LOG=str(self.log))
-        env["PATH"] = os.pathsep.join([str(self.tools), env["PATH"]])
-        return subprocess.run(
-            ["sh", str(ROOT / "scripts/policy_hook.sh"), "--without-transcript", "admit"],
-            input=json.dumps(payload), capture_output=True, text=True, check=False, env=env,
-        )
-
-    def test_a_hook_with_a_transcript_never_starts_the_cli(self) -> None:
-        result = self.run_hook({"hook_event_name": "Stop", "transcript_path": "/root/.claude/projects/p/s.jsonl"})
-
-        self.assertEqual((result.returncode, result.stdout), (0, ""))
-        self.assertFalse(self.log.exists())
-
-    def test_a_hook_without_a_transcript_reaches_admit_with_its_payload(self) -> None:
-        payload = {"hook_event_name": "Stop", "transcript_path": "", "session_id": "s"}
-
-        result = self.run_hook(payload)
-
-        self.assertEqual(result.stdout, '{"decision":"block"}\n')
-        self.assertEqual(self.log.read_text(), f"remote policy hooks admit {json.dumps(payload)}\n")
-
-    def test_the_spaced_form_counts_as_no_transcript(self) -> None:
-        result = self.run_hook({"transcript_path": "", "hook_event_name": "Stop"})
-
-        self.assertEqual(result.stdout, '{"decision":"block"}\n')
+        self.assertNotIn(TOKEN, self.state("cowork-setup.log").read_text())
 
 
 class BuildZipTests(unittest.TestCase):
@@ -325,16 +421,12 @@ class BuildZipTests(unittest.TestCase):
         )
 
     def names(self) -> list[str]:
-        import zipfile
-
         with zipfile.ZipFile(Path(self.out.name, "p.zip")) as archive:
             return sorted(archive.namelist())
 
-    def read(self, name: str) -> str:
-        import zipfile
-
+    def read(self, name: str) -> bytes:
         with zipfile.ZipFile(Path(self.out.name, "p.zip")) as archive:
-            return archive.read(name).decode()
+            return archive.read(name)
 
     def test_the_zip_holds_the_claude_plugin_and_the_token(self) -> None:
         result = self.build()
@@ -343,9 +435,20 @@ class BuildZipTests(unittest.TestCase):
         names = self.names()
         for name in (".claude-plugin/plugin.json", "hooks/hooks.json", "monitors/monitors.json", "scripts/session_start.sh", "scripts/policy_hook.sh", "skills/status/SKILL.md"):
             self.assertIn(name, names)
-        for prefix in ("devin/", "tests/", "docs/", ".codex-plugin/", ".cursor-plugin/", "hooks/codex.json", "hooks/cursor.json"):
+        for prefix in ("devin/", "tests/", "docs/", ".codex-plugin/", ".cursor-plugin/", "hooks/codex.json", "hooks/cursor.json", "cowork/hooks.json"):
             self.assertFalse([n for n in names if n.startswith(prefix)], prefix)
-        self.assertEqual(self.read("cowork/enroll.env"), f"STACKTRACE_REMOTE_TOKEN={TOKEN}\n")
+        self.assertEqual(self.read("cowork/enroll.env").decode(), f"STACKTRACE_REMOTE_TOKEN={TOKEN}\n")
+
+    def test_the_zip_runs_the_cowork_hooks_over_the_plugins_own_scripts(self) -> None:
+        self.build()
+
+        self.assertEqual(self.read("hooks/hooks.json"), (ROOT / "cowork/hooks.json").read_bytes())
+        for name in ("setup.sh", "session_start.sh", "policy_hook.sh"):
+            self.assertEqual(self.read(f"cowork/{name}"), (ROOT / "cowork" / name).read_bytes())
+        for script in (ROOT / "scripts").iterdir():
+            if script.name not in ("build_cowork_zip.sh", "validate_plugin.py"):
+                with self.subTest(script=script.name):
+                    self.assertEqual(self.read(f"scripts/{script.name}"), script.read_bytes())
 
     def test_a_wheel_goes_in_beside_the_token(self) -> None:
         wheel = Path(self.out.name, "stacktrace_cli-0.27.0-py3-none-any.whl")
@@ -354,7 +457,7 @@ class BuildZipTests(unittest.TestCase):
         self.build("--wheel", str(wheel))
 
         self.assertIn("cowork/stacktrace_cli-0.27.0-py3-none-any.whl", self.names())
-        self.assertIn("STACKTRACE_CLI_WHEEL=stacktrace_cli-0.27.0-py3-none-any.whl\n", self.read("cowork/enroll.env"))
+        self.assertIn("STACKTRACE_CLI_WHEEL=stacktrace_cli-0.27.0-py3-none-any.whl\n", self.read("cowork/enroll.env").decode())
 
     def test_no_token_or_an_unplain_token_builds_nothing(self) -> None:
         for token in (None, "two words", "a'quote"):
@@ -420,10 +523,9 @@ class PipedBuildTests(unittest.TestCase):
         urls = self.log.read_text().splitlines()
         self.assertTrue(urls[0].endswith("/main/.claude-plugin/marketplace.json"))
         self.assertEqual(urls[1], f"https://codeload.github.com/stacktrace-ai/stacktrace-plugin/tar.gz/{self.SHA}")
-        import zipfile
-
         with zipfile.ZipFile(self.zip) as archive:
             self.assertIn("scripts/session_start.sh", archive.namelist())
+            self.assertIn("cowork/setup.sh", archive.namelist())
             self.assertEqual(archive.read("cowork/enroll.env").decode(), f"STACKTRACE_REMOTE_TOKEN={TOKEN}\n")
         self.assertIn("Organization settings > Plugins & skills", result.stdout)
 

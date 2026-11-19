@@ -1,0 +1,103 @@
+{
+  "description": "The Claude Cowork zip's hooks (ADR-0014): the plugin's own hooks, each after this boot's setup, and the turn's journal where the agent keeps no transcript.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/cowork/session_start.sh\" --agent-kind claude-code 2>/dev/null || true",
+            "timeout": 60,
+            "onFailure": "continue"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/cowork/policy_hook.sh\" 50 admit 2>/dev/null || true",
+            "timeout": 60,
+            "onFailure": "continue"
+          }
+        ],
+        "matcher": "^(mcp__.*|Skill|Agent|Task|Bash|PowerShell|Monitor|Read|Grep|Glob|Write|Edit|MultiEdit|NotebookEdit|WebFetch|WebSearch)$"
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/cowork/policy_hook.sh\" 0 admit 2>/dev/null || true",
+            "timeout": 5,
+            "onFailure": "continue"
+          }
+        ],
+        "matcher": "^(mcp__.*|Read|Grep|Glob|Bash|Monitor|PowerShell|WebFetch|WebSearch|Agent|Task|TaskOutput|SubagentHandback|ReadMcpResourceTool|ListMcpResourcesTool|LSP)$"
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/cowork/policy_hook.sh\" 0 admit 2>/dev/null || true",
+            "timeout": 5,
+            "onFailure": "continue"
+          }
+        ],
+        "matcher": "^(Write|Edit|MultiEdit|NotebookEdit)$"
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/cowork/policy_hook.sh\" 0 admit 2>/dev/null || true",
+            "timeout": 5,
+            "onFailure": "continue"
+          }
+        ],
+        "matcher": "^(mcp__.*|Read|Grep|Glob|Bash|Monitor|PowerShell|WebFetch|WebSearch|Agent|Task|TaskOutput|SubagentHandback|ReadMcpResourceTool|ListMcpResourcesTool|LSP)$"
+      }
+    ],
+    "UserPromptExpansion": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/cowork/policy_hook.sh\" 50 admit 2>/dev/null || true",
+            "timeout": 60,
+            "onFailure": "continue"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/cowork/policy_hook.sh\" 50 admit 2>/dev/null || true",
+            "timeout": 60,
+            "onFailure": "continue"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/cowork/policy_hook.sh\" 0 admit 2>/dev/null || true",
+            "timeout": 5,
+            "onFailure": "continue"
+          }
+        ]
+      }
+    ]
+  }
+}

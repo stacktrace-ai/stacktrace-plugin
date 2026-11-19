@@ -81,7 +81,7 @@ if [ -z "$root" ] || [ ! -f "$root/.claude-plugin/plugin.json" ]; then
     { echo "error: cannot download the plugin at $ref" >&2; exit 1; }
   root="$stage/source"
 fi
-if ! grep -q remote_cowork "$root/scripts/session_start.sh"; then
+if [ ! -f "$root/cowork/hooks.json" ] || [ ! -f "$root/cowork/setup.sh" ]; then
   echo "error: this plugin release does not support Claude Cowork yet" >&2
   exit 1
 fi
@@ -89,7 +89,11 @@ fi
 plugin="$stage/plugin"
 mkdir -p "$plugin/.claude-plugin" "$plugin/hooks" "$plugin/cowork"
 cp "$root/.claude-plugin/plugin.json" "$plugin/.claude-plugin/"
-cp "$root/hooks/hooks.json" "$plugin/hooks/"
+# The zip runs the Cowork hooks in place of the plugin's own. They call the
+# plugin's scripts after this boot's setup. The plugin's own hooks never call
+# the `cowork` folder.
+cp "$root/cowork/hooks.json" "$plugin/hooks/hooks.json"
+cp "$root/cowork/setup.sh" "$root/cowork/session_start.sh" "$root/cowork/policy_hook.sh" "$plugin/cowork/"
 cp -R "$root/monitors" "$root/scripts" "$root/skills" "$plugin/"
 rm -f "$plugin/scripts/build_cowork_zip.sh" "$plugin/scripts/validate_plugin.py"
 

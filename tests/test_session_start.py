@@ -34,15 +34,14 @@ def session_start_hooks() -> dict[str, dict[str, object]]:
 
 
 class HookDeclarationTests(unittest.TestCase):
-    def test_every_host_runs_the_one_script_for_fifteen_seconds_and_claude_for_sixty(self) -> None:
+    def test_every_host_runs_the_one_script_for_fifteen_seconds(self) -> None:
         hooks = session_start_hooks()
         self.assertEqual(set(hooks), set(KINDS))
         for kind, handler in hooks.items():
             with self.subTest(kind=kind):
                 self.assertIn(f"scripts/session_start.sh{'' if kind == 'cursor' else chr(34)} --agent-kind {kind}", handler["command"])
                 self.assertNotIn("policy_hook.sh", handler["command"])
-                # Claude Code's covers a Cowork VM's install (ADR-0014).
-                self.assertEqual(handler["timeout"], 60 if kind == "claude-code" else 15)
+                self.assertEqual(handler["timeout"], 15)
 
     def test_devin_runs_a_byte_copy(self) -> None:
         copy = ROOT / "devin/scripts/session_start.sh"

@@ -12,19 +12,6 @@ from typing import Any, NoReturn
 
 ROOT = Path(__file__).resolve().parents[1]
 
-#: A hook that reaches `admit` only when the payload names no transcript, as
-#: in a Cowork VM (stacktrace ADR-0260). A laptop never starts the CLI for it.
-JOURNAL_ONLY = {
-    "type": "command",
-    "command": 'sh "${CLAUDE_PLUGIN_ROOT}/scripts/policy_hook.sh" --without-transcript admit 2>/dev/null || true',
-    "timeout": 5,
-    "onFailure": "continue",
-}
-
-
-#: The events whose hook decides, and so may wait for Cowork's setup.
-DECIDING = ("PreToolUse", "UserPromptExpansion", "UserPromptSubmit")
-
 
 def fail(message: str) -> NoReturn:
     print(f"error: {message}", file=sys.stderr)
@@ -167,13 +154,12 @@ def main() -> int:
         fail("plugin must declare exactly one direct Stacktrace session monitor")
 
     configured = hooks.get("hooks") if isinstance(hooks, dict) else None
-    if not isinstance(configured, dict) or set(configured) != {"SessionStart", "PreToolUse", "PostToolUse", "PostToolUseFailure", "UserPromptExpansion", "UserPromptSubmit", "Stop"}:
-        fail("hooks must contain SessionStart guidance, the three synchronous admission events, PostToolUse marking and the journal-only Stop")
+    if not isinstance(configured, dict) or set(configured) != {"SessionStart", "PreToolUse", "PostToolUse", "PostToolUseFailure", "UserPromptExpansion", "UserPromptSubmit"}:
+        fail("hooks must contain SessionStart guidance, the three synchronous admission events and PostToolUse marking")
     expected_start = {"hooks": [{
         "type": "command",
         "command": 'sh "${CLAUDE_PLUGIN_ROOT}/scripts/session_start.sh" --agent-kind claude-code 2>/dev/null || true',
-        # Sixty seconds, so a Cowork VM can install the CLI (ADR-0014).
-        "timeout": 60,
+        "timeout": 15,
         "onFailure": "continue",
     }]}
     if configured["SessionStart"] != [expected_start]:
@@ -184,9 +170,7 @@ def main() -> int:
             "hooks": [{
                 "type": "command",
                 "command": 'sh "${CLAUDE_PLUGIN_ROOT}/scripts/policy_hook.sh" admit 2>/dev/null || true',
-                # A hook that decides may wait for Cowork's setup, at most 50 s
-                # (ADR-0014). Elsewhere it answers at once.
-                "timeout": 60 if event in DECIDING else 5,
+                "timeout": 5,
                 "onFailure": "continue",
             }],
         }
@@ -202,20 +186,11 @@ def main() -> int:
             expected_group["matcher"] = (
                 "^(mcp__.*|Read|Grep|Glob|Bash|Monitor|PowerShell|WebFetch|WebSearch|Agent|Task|TaskOutput|SubagentHandback|ReadMcpResourceTool|ListMcpResourcesTool|LSP)$"
             )
-        groups = [expected_group]
-        if event == "PostToolUse":
-            # Where the agent keeps no transcript, the write tools' results
-            # reach the CLI for its journal (stacktrace ADR-0260).
-            groups.append({"hooks": [dict(JOURNAL_ONLY)], "matcher": "^(Write|Edit|MultiEdit|NotebookEdit)$"})
-        if configured[event] != groups:
+        if configured[event] != [expected_group]:
             fail(f"{event} must use bounded synchronous admission that continues on failure")
-    if configured["Stop"] != [{"hooks": [dict(JOURNAL_ONLY)]}]:
-        fail("Stop must reach the CLI only where the agent keeps no transcript")
 
     if not (ROOT / "scripts" / "policy_hook.sh").is_file():
         fail("scripts/policy_hook.sh must normalize failed CLI exits")
-    if not (ROOT / "scripts" / "cowork_setup.sh").is_file():
-        fail("scripts/cowork_setup.sh must make a Cowork VM ready for each boot")
 
     expected_skills = {"findings", "status"}
     skills_root = ROOT / "skills"
