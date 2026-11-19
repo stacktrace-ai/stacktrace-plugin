@@ -13,7 +13,7 @@
     ],
     "PreToolUse": [
       {
-        "matcher": "^(mcp__.*|Bash)$",
+        "matcher": "^(mcp__.*|Bash|apply_patch)$",
         "hooks": [
           {
             "type": "command",

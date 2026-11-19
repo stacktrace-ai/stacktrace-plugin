@@ -37,17 +37,17 @@ class CodexHooksTests(unittest.TestCase):
             self.assertNotIn('onFailure', handler)
 
 
-    def test_codex_sends_mcp_calls_and_its_shell_and_no_other_tool(self):
+    def test_codex_sends_mcp_calls_its_shell_and_its_patches_and_no_other_tool(self):
         """Codex names its shell tool `Bash` at the hook, for `exec_command` and for a
-        patch sent through the shell. A native `apply_patch` call is not sent until its
-        hook input is seen (stacktrace ADR-0216)."""
+        patch sent through the shell. A native patch is `apply_patch` (stacktrace
+        ADR-0216, ADR-0222)."""
         import re
         manifest = json.loads((ROOT / '.codex-plugin/plugin.json').read_text())
         hooks = json.loads((ROOT / manifest['hooks']).read_text())['hooks']
         matcher = re.compile(hooks['PreToolUse'][0]['matcher'])
-        for tool in ('Bash', 'mcp__server__ping', 'mcp__codex_apps__github__fetch_file'):
+        for tool in ('Bash', 'apply_patch', 'mcp__server__ping', 'mcp__codex_apps__github__fetch_file'):
             self.assertTrue(matcher.search(tool), tool)
-        for tool in ('apply_patch', 'Edit', 'Write', 'exec_command', 'spawn_agent', 'BashOutput', 'xBash'):
+        for tool in ('apply_patchx', 'Edit', 'Write', 'exec_command', 'spawn_agent', 'BashOutput', 'xBash'):
             self.assertFalse(matcher.search(tool), tool)
 
 

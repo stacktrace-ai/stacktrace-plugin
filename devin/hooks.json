@@ -22,5 +22,17 @@
         }
       ]
     }
+  ],
+  "UserPromptSubmit": [
+    {
+      "matcher": "",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "sh \"${PLUGIN_ROOT}/scripts/policy_hook.sh\" admit --agent-kind devin",
+          "timeout": 5
+        }
+      ]
+    }
   ]
 }

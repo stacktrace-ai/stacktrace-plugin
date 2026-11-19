@@ -336,9 +336,12 @@ class PluginContractTests(unittest.TestCase):
 
     def test_plugin_has_no_turn_or_session_end_detection_hook(self) -> None:
         document = json.loads((ROOT / "hooks" / "hooks.json").read_text(encoding="utf-8"))
+        # PostToolUse only sends a tool result for injection marking; it
+        # decides nothing and detects nothing at the end of a turn
+        # (stacktrace ADR-0223).
         self.assertEqual(
             set(document["hooks"]),
-            {"SessionStart", "PreToolUse", "UserPromptExpansion", "UserPromptSubmit"},
+            {"SessionStart", "PreToolUse", "PostToolUse", "PostToolUseFailure", "UserPromptExpansion", "UserPromptSubmit"},
         )
 
     def test_admission_reaches_every_tool_a_stacktrace_rule_can_block(self) -> None:
@@ -348,14 +351,30 @@ class PluginContractTests(unittest.TestCase):
         # decides; the matcher only has to deliver the call.
         document = json.loads((ROOT / "hooks" / "hooks.json").read_text(encoding="utf-8"))
         matcher = re.compile(document["hooks"]["PreToolUse"][0]["matcher"])
+        # `file_read` and `file_search` too: stacktrace ADR-0193 reads their
+        # paths, and the injection rule judges every call (ADR-0221).
         blockable = (
-            "Bash", "PowerShell", "Monitor", "Write", "Edit", "MultiEdit", "NotebookEdit", "WebFetch", "WebSearch",
-            "Skill", "Agent", "Task", "mcp__github__create_issue",
+            "Bash", "PowerShell", "Monitor", "Read", "Grep", "Glob", "Write", "Edit", "MultiEdit", "NotebookEdit",
+            "WebFetch", "WebSearch", "Skill", "Agent", "Task", "mcp__github__create_issue",
         )
         for tool in blockable:
             self.assertTrue(matcher.fullmatch(tool), tool)
         # A tool no rule reads pays no hook round trip.
-        for tool in ("Read", "Grep", "Glob", "LS", "TodoWrite", "BashOutput", "KillShell", "NotebookRead"):
+        for tool in ("LS", "TodoWrite", "BashOutput", "KillShell", "NotebookRead"):
+            self.assertFalse(matcher.fullmatch(tool), tool)
+
+    def test_post_tool_use_sends_only_results_that_bring_untrusted_text(self) -> None:
+        # Marking for the injection rule (stacktrace ADR-0223). A result the
+        # agent made itself, such as a file it wrote, brings no outside text.
+        document = json.loads((ROOT / "hooks" / "hooks.json").read_text(encoding="utf-8"))
+        # A failed call's text can carry a mark too, so failures match alike.
+        self.assertEqual(document["hooks"]["PostToolUseFailure"], document["hooks"]["PostToolUse"])
+        (group,) = document["hooks"]["PostToolUse"]
+        self.assertEqual(group["hooks"][0]["onFailure"], "continue")
+        matcher = re.compile(group["matcher"])
+        for tool in ("mcp__github__get_issue", "Read", "Grep", "Glob", "Bash", "Monitor", "WebFetch", "WebSearch", "Agent", "Task", "TaskOutput", "SubagentHandback", "ReadMcpResourceTool", "ListMcpResourcesTool", "LSP"):
+            self.assertTrue(matcher.fullmatch(tool), tool)
+        for tool in ("Write", "Edit", "TodoWrite", "Skill"):
             self.assertFalse(matcher.fullmatch(tool), tool)
 
     def test_a_submitted_prompt_reaches_admission(self) -> None:
@@ -857,9 +876,9 @@ class PolicyHookContractTests(unittest.TestCase):
         matcher = re.compile(document["hooks"]["PreToolUse"][0]["matcher"])
         for tool in ("mcp__github__read", "Skill", "Agent", "Task"):
             self.assertIsNotNone(matcher.fullmatch(tool))
-        # Bash and Write now reach admission too: a blockable rule reads them
-        # (test_admission_reaches_every_tool_a_stacktrace_rule_can_block).
-        self.assertIsNone(matcher.fullmatch("Read"))
+        # Bash, Write and Read now reach admission too: a blockable rule reads
+        # them (test_admission_reaches_every_tool_a_stacktrace_rule_can_block).
+        self.assertIsNone(matcher.fullmatch("TodoWrite"))
 
 
 class PolicyAdapterExitTests(unittest.TestCase):

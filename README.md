@@ -41,6 +41,30 @@ Each session start says when the CLI or the daemon is missing, and
 the detached daemon with `stacktrace daemon stop` followed by `stacktrace daemon
 start`, or restart the host-managed service.
 
+## Claude Cowork
+
+Claude Cowork runs each task in a new cloud VM. Cowork does not read
+`~/.claude`, and it has no plugin settings. So an Owner uploads a zip that
+holds this plugin and the organization's Fleet token (ADR-0014). A Team or
+Enterprise plan is necessary.
+
+1. Run this command on any Mac or Linux computer. It asks for the Fleet
+   token, and writes `~/Downloads/stacktrace-cowork.zip`:
+
+   ```sh
+   curl -fsSL https://raw.githubusercontent.com/stacktrace-ai/stacktrace-plugin/main/scripts/build_cowork_zip.sh | sh
+   ```
+
+2. In claude.ai, open Organization settings > Capabilities > Code execution.
+   Keep network egress on, and allow `api.stacktrace.ai` and `stacktrace.ai`.
+3. Open Organization settings > Plugins & skills. Upload the zip, and set it
+   to Required.
+
+Each new Cowork task then installs the CLI, connects to Fleet and applies the
+organization's policy. Use a Fleet token for Cowork only, and keep the zip as
+you keep the token. Make a new zip and upload it after each plugin release,
+and when you rotate the token.
+
 ## Automatic flow
 
 For each interactive Claude session, the plugin runs:
@@ -149,13 +173,19 @@ stacktrace remote policy hooks status
 
 Start a new Claude session.
 The synchronous `PreToolUse` hook covers MCP tools, Skill calls and namespaced plugin-agent calls.
-It also covers the built-in tools that a Stacktrace detection rule can block: `Bash`, `Monitor`, `Write`, `Edit`, `MultiEdit`, `NotebookEdit`, `WebFetch` and `WebSearch`.
+It also covers the built-in tools that a Stacktrace detection rule can block: `Bash`, `Monitor`, `Read`, `Grep`, `Glob`, `Write`, `Edit`, `MultiEdit`, `NotebookEdit`, `WebFetch` and `WebSearch`.
 The hook also receives `PowerShell` calls.
 On macOS and Linux, Claude Code runs that tool only when `CLAUDE_CODE_USE_POWERSHELL_TOOL=1` is set and `pwsh` is installed.
 `stacktrace-cli` 0.19.0 does not classify `PowerShell` yet, so it gives such a call no decision, and the call runs.
 MCP selection uses native server provenance.
 `UserPromptExpansion` covers direct slash-command expansion.
 `UserPromptSubmit` covers a prompt that a person submits.
+`PostToolUse` and `PostToolUseFailure` send the result of an MCP, `Read`, `Grep`, `Glob`, `Bash`, `Monitor`, `PowerShell`, `WebFetch`, `WebSearch`, `Agent`, `Task`, `TaskOutput`, `SubagentHandback`, `ReadMcpResourceTool`, `ListMcpResourcesTool` or `LSP` call to the daemon.
+The daemon keeps keyed hashes of the values that the result names, for `stacktrace-injection-followed` (stacktrace ADR-0223).
+This hook needs a `stacktrace-cli` release newer than 0.24.0, the first with that rule.
+An older CLI ignores the result, so the rule's Block denies nothing.
+This hook never blocks and prints nothing.
+Before Claude Code 2.1.319, ending the turn with `Ctrl+Enter` while the tool runs skips this hook, so the result goes unmarked.
 Built-in tool and prompt decisions need `stacktrace-cli` 0.19.0 or newer.
 An older CLI may give no decision, and then the call or the prompt continues.
 Neither allow nor defer grants a native permission.
@@ -287,9 +317,10 @@ See [ADR-0013](docs/adrs/0013-one-session-start-script-for-every-host.md).
 ## Codex CLI policy hooks
 
 The development adapter covers MCP tool use, including MCP servers with known plugin ownership.
-It also sends shell commands and prompts to the daemon, so a detection rule set to Block stops them.
+It also sends shell commands, patches and prompts to the daemon, so a detection rule set to Block stops them.
 Codex names its shell tool `Bash` at the hook, also for a patch sent through the shell.
-A native `apply_patch` call is not sent, so its edit is found after the fact, not blocked.
+A native patch is `apply_patch`.
+A CLI before the one that reads it lets a native patch continue, and its edit is found after the fact.
 Shell commands and prompts need a `stacktrace-cli` newer than 0.21.0. An older CLI lets them continue.
 It calls the same user daemon as Claude.
 It does not add a notification monitor or a skill admission event.
@@ -340,7 +371,7 @@ A release promotion must test both native hosts before changing that pin.
 
 ## Cursor policy hooks
 
-The Cursor adapter covers MCP tool use, including MCP servers that a plugin bundles.
+The Cursor adapter covers MCP tool use, including MCP servers that a plugin bundles, and submitted prompts.
 It calls the same user daemon as Claude and Codex.
 It adds no notification monitor and no skill, command or sub-agent admission.
 The Cursor CLI fires no admission event for those.
@@ -367,8 +398,9 @@ Cursor reads `~/.cursor/plugins/local` only when a team admin allows user plugin
 
 Cursor reads `.cursor-plugin/plugin.json` and `hooks/cursor.json`.
 The `sessionStart` hook runs `scripts/session_start.sh`, which registers the project.
-The `beforeMCPExecution` hook runs `scripts/policy_hook.sh` and asks the daemon for a decision.
-Both hooks run from the plugin root.
+The `beforeMCPExecution` and `beforeSubmitPrompt` hooks run `scripts/policy_hook.sh` and ask the daemon for a decision.
+A blocked prompt gets `continue: false`, and Cursor shows the reason to the person.
+The hooks run from the plugin root.
 The wrapper prints nothing when the CLI fails, so Cursor's own approval decides.
 The hooks do not set `failClosed`.
 
@@ -384,8 +416,11 @@ The desktop app and Cursor's public marketplace are not yet tested.
 
 ## Devin policy hooks
 
-The Devin adapter covers MCP tool use.
+The Devin adapter covers MCP tool use and submitted prompts.
 It calls the same user daemon as Claude, Codex and Cursor.
+A blocked prompt gets Devin's top-level `decision: block`.
+No signed-in Devin session has confirmed that Devin stops a prompt on it.
+An older CLI returns no decision for a Devin prompt, so the prompt continues.
 It adds no notification monitor and no skill, sub-agent or built-in tool admission.
 Fleet's MCP default decides each Devin MCP call, because OpenACA collects no Devin policy evidence yet.
 The hooks run only in local Devin sessions: the CLI and Devin Desktop.
@@ -414,11 +449,13 @@ Add this entry to `requiredPlugins` in its managed manifest:
 ```
 
 Start a new session after the install.
-Type `/hooks` to see the two Stacktrace hooks.
+Type `/hooks` to see the three Stacktrace hooks.
 
 The `SessionStart` hook runs `session_start.sh`, which registers the project.
 The `PreToolUse` hook runs `policy_hook.sh`, which asks the daemon for a decision on `mcp__<server>__<tool>` and `mcp_call_tool`.
-Both hooks run their scripts through `${PLUGIN_ROOT}`.
+The `UserPromptSubmit` hook runs `policy_hook.sh`, which asks the daemon for a decision on a submitted prompt.
+A blocked prompt gets Devin's top-level `decision: block`.
+All hooks run their scripts through `${PLUGIN_ROOT}`.
 Devin sets `PLUGIN_ROOT` for plugin hooks from Devin CLI 3000.11.92.
 The wrapper prints nothing when the CLI fails, so Devin's own permissions decide.
 The hooks do not set `fail_closed`.

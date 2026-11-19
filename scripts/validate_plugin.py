@@ -42,7 +42,7 @@ def main() -> int:
     # Every host's SessionStart runs the one session start script for 15 seconds (ADR-0013).
     expected_codex = {
         "SessionStart": [{"hooks": [{"type": "command", "command": 'sh "${PLUGIN_ROOT}/scripts/session_start.sh" --agent-kind codex', "timeout": 15}]}],
-        "PreToolUse": [{"hooks": [{"type": "command", "command": 'sh "${PLUGIN_ROOT}/scripts/policy_hook.sh" admit --agent-kind codex', "timeout": 5}], "matcher": "^(mcp__.*|Bash)$"}],
+        "PreToolUse": [{"hooks": [{"type": "command", "command": 'sh "${PLUGIN_ROOT}/scripts/policy_hook.sh" admit --agent-kind codex', "timeout": 5}], "matcher": "^(mcp__.*|Bash|apply_patch)$"}],
         "UserPromptSubmit": [{"hooks": [{"type": "command", "command": 'sh "${PLUGIN_ROOT}/scripts/policy_hook.sh" admit --agent-kind codex', "timeout": 5}]}],
     }
     if codex_hooks != {"hooks": expected_codex}:
@@ -57,9 +57,10 @@ def main() -> int:
     expected_cursor = {
         "sessionStart": [{"command": "sh ./scripts/session_start.sh --agent-kind cursor", "timeout": 15}],
         "beforeMCPExecution": [{"command": "sh ./scripts/policy_hook.sh admit --agent-kind cursor", "timeout": 5}],
+        "beforeSubmitPrompt": [{"command": "sh ./scripts/policy_hook.sh admit --agent-kind cursor", "timeout": 5}],
     }
     if load_json("hooks/cursor.json") != {"version": 1, "hooks": expected_cursor}:
-        fail("Cursor hooks must delegate registration to the session start script and MCP admission to the failure wrapper")
+        fail("Cursor hooks must delegate registration to the session start script, and MCP and prompt admission to the failure wrapper")
 
     # Devin installs the `devin` folder (ADR-0012). Its manifest has no hooks
     # field: Devin reads `hooks.json` at the plugin root. The folder carries its
@@ -69,9 +70,10 @@ def main() -> int:
     expected_devin = {
         "SessionStart": [{"matcher": "", "hooks": [{"type": "command", "command": 'sh "${PLUGIN_ROOT}/scripts/session_start.sh" --agent-kind devin', "timeout": 15}]}],
         "PreToolUse": [{"matcher": "^(mcp__.+|mcp_call_tool)$", "hooks": [{"type": "command", "command": 'sh "${PLUGIN_ROOT}/scripts/policy_hook.sh" admit --agent-kind devin', "timeout": 5}]}],
+        "UserPromptSubmit": [{"matcher": "", "hooks": [{"type": "command", "command": 'sh "${PLUGIN_ROOT}/scripts/policy_hook.sh" admit --agent-kind devin', "timeout": 5}]}],
     }
     if load_json("devin/hooks.json") != expected_devin:
-        fail("Devin hooks must delegate registration to the session start script and MCP admission to the failure wrapper")
+        fail("Devin hooks must delegate registration to the session start script, and MCP and prompt admission to the failure wrapper")
     for script in ("policy_hook.sh", "session_start.sh"):
         copy = ROOT / "devin" / "scripts" / script
         if not copy.is_file() or copy.read_bytes() != (ROOT / "scripts" / script).read_bytes():
@@ -152,8 +154,8 @@ def main() -> int:
         fail("plugin must declare exactly one direct Stacktrace session monitor")
 
     configured = hooks.get("hooks") if isinstance(hooks, dict) else None
-    if not isinstance(configured, dict) or set(configured) != {"SessionStart", "PreToolUse", "UserPromptExpansion", "UserPromptSubmit"}:
-        fail("hooks must contain SessionStart guidance and the three synchronous admission events")
+    if not isinstance(configured, dict) or set(configured) != {"SessionStart", "PreToolUse", "PostToolUse", "PostToolUseFailure", "UserPromptExpansion", "UserPromptSubmit"}:
+        fail("hooks must contain SessionStart guidance, the three synchronous admission events and PostToolUse marking")
     expected_start = {"hooks": [{
         "type": "command",
         "command": 'sh "${CLAUDE_PLUGIN_ROOT}/scripts/session_start.sh" --agent-kind claude-code 2>/dev/null || true',
@@ -163,7 +165,7 @@ def main() -> int:
     if configured["SessionStart"] != [expected_start]:
         fail("SessionStart must teach notifications and delegate registration to the CLI")
 
-    for event in ("PreToolUse", "UserPromptExpansion", "UserPromptSubmit"):
+    for event in ("PreToolUse", "PostToolUse", "PostToolUseFailure", "UserPromptExpansion", "UserPromptSubmit"):
         expected_group = {
             "hooks": [{
                 "type": "command",
@@ -173,8 +175,16 @@ def main() -> int:
             }],
         }
         if event == "PreToolUse":
+            # Read, Grep and Glob carry the paths stacktrace ADR-0193 reads.
             expected_group["matcher"] = (
-                "^(mcp__.*|Skill|Agent|Task|Bash|PowerShell|Monitor|Write|Edit|MultiEdit|NotebookEdit|WebFetch|WebSearch)$"
+                "^(mcp__.*|Skill|Agent|Task|Bash|PowerShell|Monitor|Read|Grep|Glob|Write|Edit|MultiEdit|NotebookEdit|WebFetch|WebSearch)$"
+            )
+        if event in ("PostToolUse", "PostToolUseFailure"):
+            # The results that bring untrusted text, for injection marking
+            # (stacktrace ADR-0223). A failed call's text can carry a mark
+            # too. Neither blocks nor prints.
+            expected_group["matcher"] = (
+                "^(mcp__.*|Read|Grep|Glob|Bash|Monitor|PowerShell|WebFetch|WebSearch|Agent|Task|TaskOutput|SubagentHandback|ReadMcpResourceTool|ListMcpResourcesTool|LSP)$"
             )
         if configured[event] != [expected_group]:
             fail(f"{event} must use bounded synchronous admission that continues on failure")
