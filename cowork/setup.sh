@@ -10,15 +10,16 @@
 # this first. It returns at once when this boot is ready. Else it starts one
 # setup for the boot and waits for it, at most WAIT_SECONDS. The setup runs in
 # its own session, so a hook that times out does not stop it. It installs the
-# CLI, enrolls with the zip's token, starts the daemon, and is ready only when
-# the daemon holds the organization's policy.
+# CLI and saves the zip's token, once for each task, because the disk stays
+# across restarts. Then it starts the daemon and asks the daemon's socket for
+# the policy. It is ready only when the daemon holds the organization's policy.
 #
 # Exit 0: ready, or not a Cowork VM. 1: not ready yet. 3: the install failed.
 # 4: the API did not answer. 5: the daemon did not take the policy. A failure
 # stays for its boot for five minutes, so later hooks do not wait on it again.
 #
-# Each step's result is one line in `cowork-setup.log` in the state folder:
-# the time, the boot, the step and a number. Never a value or a payload.
+# Each step is one line in `cowork-setup.log` in the state folder: the time,
+# the boot, the step and its milliseconds or code. Never a value or a payload.
 set -u
 
 [ "${CLAUDE_CODE_ENTRYPOINT:-}" = remote_cowork ] || exit 0
@@ -35,6 +36,7 @@ failed="$state/cowork-failed"
 # One lock for each boot: a lock that a restart left behind holds nothing back.
 lock="$state/cowork-setup-$boot.lock"
 log="$state/cowork-setup.log"
+configured="$state/cowork-configured"
 cli="${HOME:-/root}/.local/bin/stacktrace"
 socket=${STACKTRACE_DAEMON_SOCKET:-/tmp/stacktrace-$(id -u 2>/dev/null || echo 0)/daemon-v1.sock}
 COWORK_CLI='stacktrace-cli==0.26.0'
@@ -43,6 +45,14 @@ POLICY_SECONDS=${STACKTRACE_COWORK_POLICY_SECONDS:-30}
 STALE_LOCK_MINUTES=3
 
 now() { date +%s; }
+
+# Milliseconds since the epoch: GNU date in the VM, else python3, else seconds.
+ms() {
+  t=$(date +%s%3N 2>/dev/null)
+  case $t in ''|*[!0-9]*) t=$(python3 -I -S -c 'import time; print(int(time.time() * 1000))' 2>/dev/null) ;; esac
+  case $t in ''|*[!0-9]*) t=$(($(now) * 1000)) ;; esac
+  echo "$t"
+}
 
 note() {
   {
@@ -74,6 +84,39 @@ s = socket.socket(socket.AF_UNIX)
 s.settimeout(1)
 s.connect(sys.argv[1])
 ' "$socket" </dev/null >/dev/null 2>&1
+}
+
+# The daemon holds a policy revision: one process asks the socket every 0.1 s.
+# The CLI's `hooks status` is the fallback, and it costs a full CLI start.
+policy_held() {
+  if command -v python3 >/dev/null 2>&1; then
+    python3 -I -S -c '
+import json, socket, sys, time
+end = time.monotonic() + float(sys.argv[2])
+while time.monotonic() < end:
+    try:
+        s = socket.socket(socket.AF_UNIX)
+        s.settimeout(1)
+        s.connect(sys.argv[1])
+        s.sendall(b"{\"version\":1,\"type\":\"policy_status\"}\n")
+        revision = json.loads(s.makefile("rb").readline(1 << 20))["status"]["desired_revision"]
+        s.close()
+        if type(revision) is int:
+            sys.exit(0)
+    except (OSError, ValueError, KeyError, TypeError):
+        pass
+    time.sleep(0.1)
+sys.exit(1)
+' "$socket" "$1" </dev/null >/dev/null 2>&1
+    return
+  fi
+  deadline=$(($(now) + $1))
+  while [ "$(now)" -lt "$deadline" ]; do
+    bounded 10 "$cli" remote policy hooks status --agent-kind claude-code </dev/null 2>/dev/null |
+      grep -Eq '"desired_revision": [0-9]+' && return 0
+    sleep 0.2 2>/dev/null || sleep 1
+  done
+  return 1
 }
 
 # 0 when ready, a failure's code while it stands, else nothing.
@@ -117,7 +160,7 @@ run() {
   echo $$ >"$lock/pid"
   trap 'rm -rf "$lock"' EXIT
   trap 'exit 1' HUP INT TERM
-  started=$(now)
+  started=$(ms)
   code=0
   cli_wheel=''
   if [ -r "$plugin_root/cowork/enroll.env" ]; then
@@ -132,39 +175,56 @@ run() {
     done <"$plugin_root/cowork/enroll.env"
   fi
   if [ ! -x "$cli" ]; then
+    step=$(ms)
     spec=$COWORK_CLI
     [ -n "$cli_wheel" ] && [ -r "$cli_wheel" ] && spec=$cli_wheel
-    if bounded 120 uv tool install --quiet "$spec" </dev/null >/dev/null 2>&1 && [ -x "$cli" ]; then
-      note install 0
+    if bounded 120 uv tool install --quiet --compile-bytecode "$spec" </dev/null >/dev/null 2>&1 && [ -x "$cli" ]; then
+      note install $(($(ms) - step))
     else
       code=3
     fi
   fi
-  if [ "$code" = 0 ] && ! curl -s -o /dev/null -m 5 "${STACKTRACE_REMOTE_API_URL:-https://api.stacktrace.ai}/" </dev/null >/dev/null 2>&1; then
+  # Until a boot of this task is ready, check that the VM reaches the API. A
+  # ready daemon keeps the policy on disk, so a restart needs no API call.
+  if [ "$code" = 0 ] && [ ! -f "$ready" ] &&
+    ! curl -s -o /dev/null -m 5 "${STACKTRACE_REMOTE_API_URL:-https://api.stacktrace.ai}/" </dev/null >/dev/null 2>&1; then
     code=4
   fi
   if [ "$code" = 0 ]; then
     PATH="$(dirname -- "$cli"):$PATH"
     export PATH
-    # The CLI starts the daemon and, for a session with no transcript, waits
-    # for it (stacktrace docs/specs/cowork.md, "Failure behavior").
-    printf '%s\n' '{"hook_event_name":"SessionStart","source":"startup","session_id":"","transcript_path":""}' |
-      bounded 60 "$cli" remote policy hooks register --agent-kind claude-code >/dev/null 2>&1 || true
-    code=5
-    deadline=$(($(now) + POLICY_SECONDS))
-    while [ "$(now)" -lt "$deadline" ]; do
-      if bounded 10 "$cli" remote policy hooks status --agent-kind claude-code </dev/null 2>/dev/null |
-        grep -Eq '"desired_revision": [0-9]+'; then
-        code=0
-        break
+    # The daemon reads the token from the saved configuration, so save it
+    # before the daemon starts. Click reads the token from the environment.
+    # The disk stays across restarts, so this runs again only for a new
+    # `enroll.env`, the one source of the token.
+    if [ -n "${STACKTRACE_REMOTE_TOKEN:-}" ] &&
+      { [ ! -f "$configured" ] || [ "$plugin_root/cowork/enroll.env" -nt "$configured" ]; }; then
+      step=$(ms)
+      bounded 60 "$cli" remote configure </dev/null >/dev/null 2>&1 && : >"$configured"
+      note configure $(($(ms) - step))
+    fi
+    step=$(ms)
+    if ! daemon_up; then
+      if command -v setsid >/dev/null 2>&1; then
+        setsid "$cli" daemon start --no-reasoning </dev/null >>"$state/daemon.log" 2>&1 &
+      else
+        "$cli" daemon start --no-reasoning </dev/null >>"$state/daemon.log" 2>&1 &
       fi
-      sleep 1
-    done
+    fi
+    if policy_held "$POLICY_SECONDS"; then
+      note policy $(($(ms) - step))
+      # Record the project with the daemon, as the CLI's own session start
+      # does. Prompts and built-in tools need no record, so nothing waits.
+      printf '%s\n' '{"hook_event_name":"SessionStart","source":"startup","session_id":"","transcript_path":""}' |
+        bounded 60 "$cli" remote policy hooks register --agent-kind claude-code >/dev/null 2>&1 &
+    else
+      code=5
+    fi
   fi
   if [ "$code" = 0 ]; then
     printf '%s\n' "$boot" >"$ready"
     rm -f "$failed"
-    note ready "$(($(now) - started))"
+    note ready $(($(ms) - started))
   else
     printf '%s %s %s\n' "$boot" "$code" "$(now)" >"$failed"
     note failed "$code"
@@ -196,5 +256,5 @@ while :; do
   result=$(outcome)
   [ -z "$result" ] || exit "$result"
   [ "$(now)" -lt "$deadline" ] || exit 1
-  sleep 1
+  sleep 0.2 2>/dev/null || sleep 1
 done

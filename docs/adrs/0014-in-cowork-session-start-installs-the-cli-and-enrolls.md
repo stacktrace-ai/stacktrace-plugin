@@ -39,13 +39,19 @@ through in both windows.
    events and matchers. It calls a wrapper in `cowork`, which runs
    `cowork/setup.sh` and then the plugin's own script with the hook's input.
 3. `cowork/setup.sh` makes the VM ready once for each boot. It installs the
-   CLI with `uv tool install` if `$HOME/.local/bin/stacktrace` is absent: the
-   wheel that the zip carries, else the version the plugin pins on PyPI. It
-   enrolls and starts the daemon. The kernel's `boot_id` names the boot.
-4. A boot is ready only when the daemon holds the organization's policy. It
-   stays ready while the daemon answers on its socket. A daemon that stops
-   without a restart makes the boot not ready, and the next hook sets it up
-   again.
+   CLI with `uv tool install --compile-bytecode` if
+   `$HOME/.local/bin/stacktrace` is absent: the wheel that the zip carries,
+   else the version the plugin pins on PyPI. It saves the token with
+   `stacktrace remote configure` when `cowork/enroll.env` is newer than the
+   last save. Then it runs `stacktrace daemon start` itself. The kernel's
+   `boot_id` names the boot.
+4. A boot is ready only when the daemon holds the organization's policy.
+   The setup asks the daemon's socket for `policy_status` every 0.1 seconds
+   from one `python3` process. It stays ready while the daemon answers on its
+   socket. A daemon that stops without a restart makes the boot not ready,
+   and the next hook sets it up again. When the boot is ready, the setup
+   starts `stacktrace remote policy hooks register` and does not wait for
+   it. A prompt or a built-in tool call needs no registered project.
 5. The setup reads `cowork/enroll.env` from the plugin root. It takes only
    `STACKTRACE_REMOTE_TOKEN`, `STACKTRACE_REMOTE_API_URL` and
    `STACKTRACE_CLI_WHEEL`, and only plain values.
@@ -58,15 +64,19 @@ through in both windows.
    hook that times out does not stop it. A lock from an earlier boot, or from
    a setup that stopped, does not hold the boot back. A failure is kept for
    its boot for five minutes, so later hooks do not wait on it again.
-8. The setup writes one line for each result to `cowork-setup.log` in the
-   state folder: the time, the boot, the step and a number. It never writes a
-   value or a payload.
+8. The setup writes one line for each step to `cowork-setup.log` in the
+   state folder: the time, the boot, the step and its milliseconds or code.
+   The steps are `install`, `configure`, `policy` and `ready`. It never
+   writes a value or a payload. A hook that waits checks the boot every 0.2
+   seconds.
 9. The zip also sends `PostToolUse` for the write tools and `Stop` to the
    CLI, which journals the turn where the agent keeps no transcript
    (stacktrace ADR-0260). The plugin's own hooks do not have them.
 10. When the install fails or the API does not answer, session start shows
     one line that names the organization's network setting. The task
-    continues.
+    continues. The setup checks that the VM reaches the API only until a
+    boot of the task is ready. After that, the daemon reads the policy from
+    its own database.
 11. Outside a Cowork VM, `cowork/setup.sh` does nothing. A Cowork zip on
     another host installs nothing and reads no token.
 
@@ -91,6 +101,12 @@ Every other decision in ADR-0008 and ADR-0013 stays.
   A wait keeps the message and checks it.
 - **Ready when the daemon answers.** Rejected: a daemon answers before it
   has the policy, and until then it allows every action.
+- **Start the daemon through `stacktrace remote policy hooks register`, and
+  poll `stacktrace remote policy hooks status`.** Rejected: that path starts
+  about eight CLI processes before the boot is ready. On a Mac a restart took
+  about 3 seconds, and in a Cowork VM 12 to 14 seconds. The direct path takes
+  about 0.7 seconds on the same Mac. After a restart the daemon reads the
+  policy from its own database, so no network call is on that path.
 - **Install from `stacktrace.ai/install.sh`.** Rejected: the installer gets
   `uv` from `astral.sh`, which a Cowork VM with "Package managers only" cannot
   reach. The VM already has `uv`, and PyPI is a package manager.
@@ -110,7 +126,11 @@ Every other decision in ADR-0008 and ADR-0013 stays.
   zip leaves.
 - The first message of a new Cowork task waits for the setup, a few
   seconds to tens of seconds. After a VM restart, the first deciding hook
-  waits for the daemon. A resumed task finds the CLI on its disk.
+  waits for the daemon, about 1 second on a Mac. A resumed task finds the CLI
+  and the saved token on its disk.
+- The setup knows the daemon's `policy_status` request and reply. The pinned
+  CLI fixes them. `stacktrace remote policy hooks status` is the fallback
+  when the VM has no `python3`.
 - Each Cowork hook checks the daemon's socket with `python3`, which adds a
   short delay to each hook.
 - A pinned version moves only with a plugin release. It must be a release

@@ -12,6 +12,7 @@ import socket
 import subprocess
 import tarfile
 import tempfile
+import threading
 import time
 import unittest
 import zipfile
@@ -23,6 +24,7 @@ ROOT = Path(__file__).resolve().parents[1]
 #: A token in the shape of a real one, made up for these tests.
 TOKEN = "stk_test_4f0c7a8e1b2c4d3e8f90"
 PIN = "stacktrace-cli==0.26.0"
+INSTALL = "uv tool install --quiet --compile-bytecode"
 DECIDING = ("PreToolUse", "UserPromptExpansion", "UserPromptSubmit")
 #: The Cowork zip's own files. Each hook in it calls one of the two wrappers.
 COWORK_FILES = ("hooks.json", "setup.sh", "session_start.sh", "policy_hook.sh")
@@ -105,6 +107,36 @@ class SeparationTests(unittest.TestCase):
         self.assertLessEqual(wait + 15, session["timeout"])
 
 
+class FakeDaemon:
+    """A daemon socket that answers `policy_status` with `STUB_REVISION`."""
+
+    def __init__(self, path: Path) -> None:
+        self.listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        self.listener.bind(str(path))
+        self.listener.listen(64)
+        threading.Thread(target=self.serve, daemon=True).start()
+
+    def serve(self) -> None:
+        while True:
+            try:
+                connection, _ = self.listener.accept()
+            except OSError:
+                return
+            with connection:
+                connection.settimeout(1)
+                try:
+                    request = connection.makefile("rb").readline()
+                    if request and json.loads(request).get("type") == "policy_status":
+                        revision = json.loads(os.environ.get("STUB_REVISION", "87"))
+                        reply = {"version": 1, "type": "policy_status", "status": {"desired_revision": revision}}
+                        connection.sendall(json.dumps(reply).encode() + b"\n")
+                except OSError:
+                    pass
+
+    def close(self) -> None:
+        self.listener.close()
+
+
 class CoworkVmTests(unittest.TestCase):
     def setUp(self) -> None:
         self.stubs = Stubs()
@@ -127,9 +159,7 @@ class CoworkVmTests(unittest.TestCase):
         self.boot = "boot-a"
         # A daemon that answers on its socket.
         self.socket = Path(self.extra.name, "d.sock")
-        self.daemon = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        self.daemon.bind(str(self.socket))
-        self.daemon.listen(64)
+        self.daemon = FakeDaemon(self.socket)
 
     def tearDown(self) -> None:
         self.daemon.close()
@@ -198,12 +228,32 @@ class CoworkVmTests(unittest.TestCase):
     def registers(self) -> list[str]:
         return [c for c in self.calls() if c.startswith("cli remote policy hooks register")]
 
+    def configures(self) -> list[str]:
+        return [c for c in self.calls() if c.startswith("cli remote configure")]
+
+    def starts(self) -> list[str]:
+        return [c for c in self.calls() if c.startswith("cli daemon start")]
+
+    def settle(self, registers: int = 1) -> None:
+        """Wait for the record of the project, which setup starts and does not wait for."""
+        deadline = time.monotonic() + 10
+        while len(self.registers()) < registers and time.monotonic() < deadline:
+            time.sleep(0.05)
+        self.assertEqual(len(self.registers()), registers)
+
     def state(self, name: str) -> Path:
         return Path(self.home.name, ".local/state/stacktrace", name)
 
     def ready(self) -> str:
         marker = self.state("cowork-ready")
         return marker.read_text().strip() if marker.exists() else ""
+
+    def no_policy(self) -> None:
+        """The daemon answers, and holds no policy for two seconds of asking."""
+        os.environ["STUB_REVISION"] = "null"
+        os.environ["STACKTRACE_COWORK_POLICY_SECONDS"] = "2"
+        self.addCleanup(os.environ.pop, "STUB_REVISION", None)
+        self.addCleanup(os.environ.pop, "STACKTRACE_COWORK_POLICY_SECONDS", None)
 
     def message(self, result: subprocess.CompletedProcess[str]) -> str:
         return str(json.loads(result.stdout).get("systemMessage", ""))
@@ -216,8 +266,8 @@ class CoworkVmTests(unittest.TestCase):
         result = self.run_start()
 
         self.assertEqual(result.returncode, 0)
-        self.assertIn(f"uv tool install --quiet {PIN}", self.calls())
-        self.assertIn(f"cli remote policy hooks register --agent-kind claude-code token={TOKEN} api=none", self.registers())
+        self.assertIn(f"{INSTALL} {PIN}", self.calls())
+        self.assertEqual([f"cli remote configure token={TOKEN} api=none"], self.configures())
         # Then the plugin's own session start runs, with the hook's input.
         self.assertIn("hookSpecificOutput", json.loads(result.stdout))
         self.assertNotIn("not connected", self.message(result))
@@ -230,14 +280,14 @@ class CoworkVmTests(unittest.TestCase):
 
         self.run_start()
 
-        self.assertIn(f"uv tool install --quiet {wheel}", self.calls())
+        self.assertIn(f"{INSTALL} {wheel}", self.calls())
 
     def test_a_wheel_name_with_a_path_is_ignored(self) -> None:
         self.enroll("STACKTRACE_CLI_WHEEL=../../etc/passwd\n")
 
         self.run_start()
 
-        self.assertIn(f"uv tool install --quiet {PIN}", self.calls())
+        self.assertIn(f"{INSTALL} {PIN}", self.calls())
 
     def test_only_the_known_names_with_plain_values_are_taken(self) -> None:
         self.enroll(
@@ -246,9 +296,13 @@ class CoworkVmTests(unittest.TestCase):
             "PATH=/tmp/evil\n"
         )
 
-        self.run_start()
+        self.daemon.close()
 
-        self.assertIn("cli remote policy hooks register --agent-kind claude-code token=none api=https://api.example.net", self.registers())
+        self.run_hook(wait=2)
+
+        # No token to save, and the daemon starts with the API's address.
+        self.assertEqual(self.configures(), [])
+        self.assertIn("cli daemon start --no-reasoning token=none api=https://api.example.net", self.starts())
 
     def test_a_failed_install_says_so_once_and_the_task_continues(self) -> None:
         self.uv(install="fail")
@@ -268,6 +322,30 @@ class CoworkVmTests(unittest.TestCase):
         result = self.run_start()
 
         self.assertIn("api.stacktrace.ai", self.message(result))
+        self.assertIn("boot-a failed 4", self.state("cowork-setup.log").read_text())
+
+    def test_a_restart_after_a_ready_boot_asks_nothing_of_the_api(self) -> None:
+        # The daemon keeps the policy on disk, so a restart needs no API call.
+        self.run_hook()
+        self.settle()
+        self.assertEqual(len([c for c in self.calls() if c.startswith("curl ")]), 1)
+        self.log.write_text("")
+        self.boot = "boot-b"
+
+        self.run_hook()
+
+        self.assertEqual([c for c in self.calls() if c.startswith("curl ")], [])
+        self.assertEqual(self.ready(), "boot-b")
+
+    def test_the_log_times_each_step_in_milliseconds(self) -> None:
+        self.enroll(f"STACKTRACE_REMOTE_TOKEN={TOKEN}\n")
+
+        self.run_hook()
+
+        steps = [line.split()[2:] for line in self.state("cowork-setup.log").read_text().splitlines()]
+        self.assertEqual([step for step, _ in steps], ["install", "configure", "policy", "ready"])
+        for _, number in steps:
+            self.assertRegex(number, r"^[0-9]+$")
 
     # The hooks that decide.
 
@@ -279,11 +357,13 @@ class CoworkVmTests(unittest.TestCase):
         self.assertEqual(self.run_hook(payload=payload), 0)
 
         calls = self.calls()
-        install = calls.index(f"uv tool install --quiet {PIN}")
-        register = calls.index(f"cli remote policy hooks register --agent-kind claude-code token={TOKEN} api=none")
+        install = calls.index(f"{INSTALL} {PIN}")
+        configure = calls.index(f"cli remote configure token={TOKEN} api=none")
         admit = next(i for i, c in enumerate(calls) if c.startswith("cli remote policy hooks admit"))
-        self.assertLess(install, register)
-        self.assertLess(register, admit)
+        self.assertLess(install, configure)
+        self.assertLess(configure, admit)
+        # The daemon answers, so setup does not start another.
+        self.assertEqual(self.starts(), [])
         self.assertIn(f"stdin {payload}", calls)
         self.assertEqual(self.ready(), "boot-a")
 
@@ -298,11 +378,12 @@ class CoworkVmTests(unittest.TestCase):
 
         self.assertEqual(codes, [0, 0, 0, 0])
         self.assertEqual(len(self.installs()), 1)
-        self.assertEqual(len(self.registers()), 1)
+        self.settle(registers=1)
         self.assertEqual(len([c for c in self.calls() if c.startswith("stdin ")]), 4)
 
     def test_a_ready_boot_is_not_set_up_again(self) -> None:
         self.run_hook()
+        self.settle()
         self.log.write_text("")
 
         self.run_hook()
@@ -311,25 +392,43 @@ class CoworkVmTests(unittest.TestCase):
 
     def test_a_restarted_vm_is_set_up_again(self) -> None:
         # A restart stops the daemon; the kernel's boot id changes with it.
+        self.enroll(f"STACKTRACE_REMOTE_TOKEN={TOKEN}\n")
         self.run_hook()
+        self.settle()
         self.log.write_text("")
         self.boot = "boot-b"
 
         self.run_hook()
 
-        self.assertEqual(len(self.registers()), 1)
-        self.assertEqual(self.installs(), [])
+        self.settle()
+        # The disk stays across a restart: the CLI and the saved token too.
+        self.assertEqual(self.installs() + self.configures(), [])
         self.assertEqual(self.ready(), "boot-b")
+
+    def test_a_new_token_is_saved_again(self) -> None:
+        self.enroll(f"STACKTRACE_REMOTE_TOKEN={TOKEN}\n")
+        self.run_hook()
+        self.settle()
+        self.boot = "boot-b"
+        self.enroll("STACKTRACE_REMOTE_TOKEN=stk_test_9d1e2f3a4b5c6d7e8f01\n")
+        # A new zip: its `enroll.env` is newer than the saved token.
+        later = time.time() + 5
+        os.utime(Path(self.plugin.name, "cowork/enroll.env"), (later, later))
+
+        self.run_hook()
+
+        self.assertEqual(len(self.configures()), 2)
 
     def test_a_daemon_that_stops_without_a_restart_is_started_again(self) -> None:
         self.run_hook()
+        self.settle()
         self.log.write_text("")
         # The socket file stays, but nothing answers on it.
         self.daemon.close()
 
         self.run_hook(wait=2)
 
-        self.assertEqual(len(self.registers()), 1)
+        self.assertEqual(len(self.starts()), 1)
         self.assertIn("daemon-gone", self.state("cowork-setup.log").read_text())
 
     def test_a_setup_killed_in_this_boot_does_not_hold_the_boot_back(self) -> None:
@@ -356,10 +455,7 @@ class CoworkVmTests(unittest.TestCase):
 
     def test_a_daemon_without_the_policy_is_not_ready(self) -> None:
         # A daemon that answers but holds no policy lets every action through.
-        os.environ["STUB_REVISION"] = "null"
-        os.environ["STACKTRACE_COWORK_POLICY_SECONDS"] = "2"
-        self.addCleanup(os.environ.pop, "STUB_REVISION", None)
-        self.addCleanup(os.environ.pop, "STACKTRACE_COWORK_POLICY_SECONDS", None)
+        self.no_policy()
 
         self.run_hook()
 
