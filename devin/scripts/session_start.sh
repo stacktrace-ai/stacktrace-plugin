@@ -110,6 +110,9 @@ if [ "$agent_kind" = claude-code ] && [ "${CLAUDE_CODE_ENTRYPOINT:-}" = remote_c
     log cowork-api-unreachable
     cowork_notice=1
   fi
+  # The VM starts with no daemon, and the CLI waits up to 20 s for it before
+  # the first prompt is checked. Give that wait room inside the 60 s hook.
+  [ -n "${STACKTRACE_ADAPTER_CALL_TIMEOUT:-}" ] || ADAPTER_CALL_TIMEOUT=25
 fi
 
 # A root installer switches to the target user and installs into this directory.

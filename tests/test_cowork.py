@@ -24,7 +24,7 @@ echo "cli $* token=${STACKTRACE_REMOTE_TOKEN:-none} api=${STACKTRACE_REMOTE_API_
 case "$1" in
   --version) echo "stacktrace 0.26.0 (openaca 0.15.0)" ;;
   telemetry) echo off ;;
-  remote) cat >/dev/null ;;
+  remote) cat >/dev/null; sleep "${STUB_REGISTER_SECONDS:-0}"; echo "cli registered" >>"$STUB_LOG" ;;
 esac
 exit 0
 """
@@ -163,6 +163,18 @@ class CoworkSessionStartTests(unittest.TestCase):
         result = self.run_start()
 
         self.assertIn("api.stacktrace.ai", self.message(result))
+
+    def test_a_cowork_vm_gives_registration_time_to_start_the_daemon(self) -> None:
+        # The CLI waits for the daemon in a Cowork session (stacktrace
+        # docs/specs/cowork.md, "Failure behavior"), longer than the usual 5 s.
+        self.enroll(f"STACKTRACE_REMOTE_TOKEN={TOKEN}\n")
+        os.environ["STUB_REGISTER_SECONDS"] = "6"
+        self.addCleanup(os.environ.pop, "STUB_REGISTER_SECONDS", None)
+        result = self.run_start()
+        self.assertEqual(result.returncode, 0)
+        self.assertIn("cli registered", self.calls())
+        log = Path(self.home.name, ".local/state/stacktrace/session-start.log")
+        self.assertNotIn("register-timeout", log.read_text() if log.exists() else "")
 
     def test_outside_cowork_the_plugin_installs_nothing_and_reads_no_token(self) -> None:
         self.enroll(f"STACKTRACE_REMOTE_TOKEN={TOKEN}\n")
