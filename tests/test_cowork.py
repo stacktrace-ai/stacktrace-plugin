@@ -468,11 +468,14 @@ class CoworkVmTests(unittest.TestCase):
         self.assertEqual(self.installs(), [])
         self.assertTrue(lock.exists())
 
-    def test_a_setup_that_hangs_past_three_minutes_does_not_hold_the_boot_back(self) -> None:
-        # Measured on the clock that does not step, never the wall clock.
+    def test_a_setup_that_hangs_past_the_limit_does_not_hold_the_boot_back(self) -> None:
+        # Measured on the clock that does not step, never the wall clock. The
+        # limit is three minutes; a new CI machine has been up for less.
+        os.environ["STACKTRACE_COWORK_STALE_LOCK_SECONDS"] = "1"
+        self.addCleanup(os.environ.pop, "STACKTRACE_COWORK_STALE_LOCK_SECONDS", None)
         lock = self.state("cowork-setup-boot-a.lock")
         lock.mkdir(parents=True)
-        (lock / "pid").write_text(f"{os.getpid()} {clock_ms() - 181_000}\n")
+        (lock / "pid").write_text(f"{os.getpid()} {clock_ms() - 2_000}\n")
 
         self.assertEqual(self.run_hook(), 0)
 

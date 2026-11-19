@@ -42,7 +42,8 @@ socket=${STACKTRACE_DAEMON_SOCKET:-/tmp/stacktrace-$(id -u 2>/dev/null || echo 0
 COWORK_CLI='stacktrace-cli==0.27.0'
 FAILURE_SECONDS=300
 POLICY_SECONDS=${STACKTRACE_COWORK_POLICY_SECONDS:-30}
-STALE_LOCK_MINUTES=3
+STALE_LOCK_SECONDS=${STACKTRACE_COWORK_STALE_LOCK_SECONDS:-180}
+case $STALE_LOCK_SECONDS in ''|*[!0-9]*) STALE_LOCK_SECONDS=180 ;; esac
 
 # Milliseconds on a clock that does not step: the kernel's uptime in the VM,
 # else python3's monotonic clock. A VM that syncs its time steps the wall
@@ -163,8 +164,8 @@ clear_stale_lock() {
   case $at in
     ''|*[!0-9]*)
       # No start time yet, or a setup that stopped before it wrote one.
-      [ -n "$(find "$lock" -maxdepth 0 -mmin +"$STALE_LOCK_MINUTES" 2>/dev/null)" ] || return 0 ;;
-    *) [ $(($(clock) - at)) -gt $((STALE_LOCK_MINUTES * 60000)) ] || return 0 ;;
+      [ -n "$(find "$lock" -maxdepth 0 -mmin +$((STALE_LOCK_SECONDS / 60)) 2>/dev/null)" ] || return 0 ;;
+    *) [ $(($(clock) - at)) -gt $((STALE_LOCK_SECONDS * 1000)) ] || return 0 ;;
   esac
   rm -rf "$lock"
   note stale-lock 1
