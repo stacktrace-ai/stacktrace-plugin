@@ -4,11 +4,13 @@ plugin's own scripts. The plugin's own hooks and scripts never call it."""
 from __future__ import annotations
 
 import copy
+import io
 import json
 import os
 import shutil
 import socket
 import subprocess
+import tarfile
 import tempfile
 import time
 import unittest
@@ -484,14 +486,21 @@ class PipedBuildTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.work.cleanup()
 
-    def serve(self, ref: str) -> None:
-        """A `curl` that serves the pinned SHA and the plugin as of `ref`."""
+    def serve(self, ref: str, *, without: str | None = None) -> None:
+        """A `curl` that serves the pinned SHA and the plugin as of `ref`,
+        less the folder `without`. CI's checkout fetches no tags, so a
+        fixture is built from `HEAD`, never from a release tag."""
         tarball = Path(self.work.name, "plugin.tar.gz")
         archive = subprocess.run(
-            ["git", "-C", str(ROOT), "archive", "--format=tar.gz", "--prefix=stacktrace-plugin-x/", ref],
+            ["git", "-C", str(ROOT), "archive", "--format=tar", "--prefix=stacktrace-plugin-x/", ref],
             capture_output=True, check=True,
         )
-        tarball.write_bytes(archive.stdout)
+        dropped = f"stacktrace-plugin-x/{without}/" if without else None
+        with tarfile.open(fileobj=io.BytesIO(archive.stdout)) as source, tarfile.open(tarball, "w:gz") as served:
+            for member in source.getmembers():
+                if dropped and (member.name + "/").startswith(dropped):
+                    continue
+                served.addfile(member, source.extractfile(member) if member.isfile() else None)
         curl = self.bin / "curl"
         curl.write_text(
             "#!/bin/sh\n"
@@ -540,7 +549,8 @@ class PipedBuildTests(unittest.TestCase):
         )
 
     def test_a_release_without_cowork_support_is_refused(self) -> None:
-        self.serve("v0.4.3")
+        # A release from before ADR-0014 has no `cowork` folder.
+        self.serve("HEAD", without="cowork")
 
         result = self.build()
 
