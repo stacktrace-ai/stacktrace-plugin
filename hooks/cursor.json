@@ -7,6 +7,13 @@
         "timeout": 15
       }
     ],
+    "preToolUse": [
+      {
+        "command": "sh ./scripts/policy_hook.sh admit --agent-kind cursor",
+        "timeout": 5,
+        "matcher": "^(Shell|Write|Delete|Read)$"
+      }
+    ],
     "beforeMCPExecution": [
       {
         "command": "sh ./scripts/policy_hook.sh admit --agent-kind cursor",

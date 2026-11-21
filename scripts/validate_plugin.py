@@ -56,11 +56,14 @@ def main() -> int:
     # sessionStart gets a longer timeout so registration survives daemon recovery (ADR-0009).
     expected_cursor = {
         "sessionStart": [{"command": "sh ./scripts/session_start.sh --agent-kind cursor", "timeout": 15}],
+        # Built-in calls reach the CLI with their input, for a detection block (ADR-0016).
+        # Never `MCP:`: beforeMCPExecution names the server, which preToolUse does not.
+        "preToolUse": [{"command": "sh ./scripts/policy_hook.sh admit --agent-kind cursor", "timeout": 5, "matcher": "^(Shell|Write|Delete|Read)$"}],
         "beforeMCPExecution": [{"command": "sh ./scripts/policy_hook.sh admit --agent-kind cursor", "timeout": 5}],
         "beforeSubmitPrompt": [{"command": "sh ./scripts/policy_hook.sh admit --agent-kind cursor", "timeout": 5}],
     }
     if load_json("hooks/cursor.json") != {"version": 1, "hooks": expected_cursor}:
-        fail("Cursor hooks must delegate registration to the session start script, and MCP and prompt admission to the failure wrapper")
+        fail("Cursor hooks must delegate registration to the session start script, and built-in call, MCP and prompt admission to the failure wrapper")
 
     # Devin installs the `devin` folder (ADR-0012). Its manifest has no hooks
     # field: Devin reads `hooks.json` at the plugin root. The folder carries its
