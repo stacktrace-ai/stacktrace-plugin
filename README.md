@@ -42,7 +42,7 @@ start`, or restart the host-managed service.
 
 ## Claude Cowork
 
-Claude Cowork runs each task in a new cloud VM. Cowork does not read
+Claude Cowork runs each cloud task in a new cloud VM. Cowork does not read
 `~/.claude`, and it has no plugin settings. So an Owner uploads a zip that
 holds this plugin and the organization's Fleet token (ADR-0014). A Team or
 Enterprise plan is necessary.
@@ -63,6 +63,13 @@ Each new Cowork task then installs the CLI, connects to Fleet and applies the
 organization's policy. Use a Fleet token for Cowork only, and keep the zip as
 you keep the token. Make a new zip and upload it after each plugin release,
 and when you rotate the token.
+
+A local Cowork task runs Claude Code on the person's Mac. Its hooks use the
+CLI that the Stacktrace installer or MDM put there, and the zip installs
+nothing on the Mac. With the MDM key `requireCoworkFullVmSandbox`, Claude
+Code runs in the VM on the Mac, and the zip sets it up as it sets up a
+cloud task (ADR-0015). The desktop app copies the zip, with the token, to
+each member's Mac.
 
 ## Automatic flow
 

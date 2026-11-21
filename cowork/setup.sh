@@ -22,7 +22,14 @@
 # the boot, the step and its milliseconds or code. Never a value or a payload.
 set -u
 
-[ "${CLAUDE_CODE_ENTRYPOINT:-}" = remote_cowork ] || exit 0
+# A cloud task, or a local task whose Claude Code runs in the VM on the
+# person's computer (`requireCoworkFullVmSandbox`). A local task on the Mac
+# itself uses the CLI that the installer or MDM put there (ADR-0015).
+case ${CLAUDE_CODE_ENTRYPOINT:-} in
+  remote_cowork) ;;
+  local-agent|local_agent) [ "$(uname -s 2>/dev/null)" = Linux ] || exit 0 ;;
+  *) exit 0 ;;
+esac
 
 here=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 plugin_root=$(dirname -- "$here")
