@@ -1,0 +1,17 @@
+{
+  "name": "stacktrace",
+  "version": "0.4.4",
+  "private": true,
+  "description": "Hook-visible policy admission through the installed Stacktrace CLI.",
+  "keywords": [
+    "pi-package"
+  ],
+  "pi": {
+    "extensions": [
+      "./pi/stacktrace.ts"
+    ],
+    "skills": [],
+    "prompts": [],
+    "themes": []
+  }
+}
