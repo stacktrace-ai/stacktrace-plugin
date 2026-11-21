@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -39,12 +40,37 @@ class CursorHooksTests(unittest.TestCase):
         manifest = json.loads((ROOT / '.cursor-plugin/plugin.json').read_text())
         hooks = json.loads((ROOT / manifest['hooks']).read_text())
         self.assertEqual(hooks['version'], 1)
-        self.assertEqual(set(hooks['hooks']), {'sessionStart', 'beforeMCPExecution', 'beforeSubmitPrompt'})
-        for event, script, timeout in (('sessionStart', 'session_start.sh', 15), ('beforeMCPExecution', 'policy_hook.sh admit', 5), ('beforeSubmitPrompt', 'policy_hook.sh admit', 5)):
+        self.assertEqual(set(hooks['hooks']), {'sessionStart', 'preToolUse', 'beforeMCPExecution', 'beforeSubmitPrompt'})
+        for event, script, timeout in (('sessionStart', 'session_start.sh', 15), ('preToolUse', 'policy_hook.sh admit', 5), ('beforeMCPExecution', 'policy_hook.sh admit', 5), ('beforeSubmitPrompt', 'policy_hook.sh admit', 5)):
             handler = hooks['hooks'][event][0]
             self.assertEqual(handler['command'], 'sh ./scripts/' + script + ' --agent-kind cursor')
             self.assertNotIn('failClosed', handler)
             self.assertEqual(handler['timeout'], timeout)
+
+    def test_pre_tool_use_sends_built_in_calls_and_never_an_mcp_call(self):
+        # Cursor tests the matcher against the tool's name (ADR-0016). A
+        # shell command, a write (every edit is a whole-file Write), a delete
+        # and a read reach the CLI for a detection block. An MCP call is
+        # `MCP:<tool>` there with no server, so beforeMCPExecution keeps it:
+        # the CLI would decide `MCP:<tool>` by Fleet's MCP default alone.
+        hooks = json.loads((ROOT / 'hooks/cursor.json').read_text())
+        matcher = re.compile(hooks['hooks']['preToolUse'][0]['matcher'])
+        for tool in ('Shell', 'Write', 'Delete', 'Read'):
+            self.assertTrue(matcher.search(tool), tool)
+        for tool in ('MCP:ping', 'Grep', 'Task', 'ReadLints', 'WebSearch', 'Shellx', 'xRead'):
+            self.assertFalse(matcher.search(tool), tool)
+
+    def test_validator_rejects_cursor_hooks_without_built_in_calls(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            shutil.copytree(ROOT, root, dirs_exist_ok=True, ignore=shutil.ignore_patterns('.git', '__pycache__'))
+            path = root / 'hooks/cursor.json'
+            document = json.loads(path.read_text())
+            del document['hooks']['preToolUse']
+            path.write_text(json.dumps(document))
+            result = subprocess.run([sys.executable, str(root / 'scripts/validate_plugin.py')], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 1)
+            self.assertIn('built-in call', result.stderr)
 
     def test_cursor_marketplace_lists_the_root_plugin(self):
         # Cursor reads this catalog before the Claude one; the user's
