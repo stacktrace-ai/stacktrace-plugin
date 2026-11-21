@@ -170,6 +170,7 @@ class CoworkVmTests(unittest.TestCase):
         self.tools = tools
         self.uv(install="ok")
         self.curl(exit_code=0)
+        self.uname("Linux")
         self.boot = "boot-a"
         # A daemon that answers on its socket.
         self.socket = Path(self.extra.name, "d.sock")
@@ -196,6 +197,12 @@ class CoworkVmTests(unittest.TestCase):
     def curl(self, exit_code: int) -> None:
         path = self.tools / "curl"
         path.write_text(f'#!/bin/sh\necho "curl $*" >>"$STUB_LOG"\nexit {exit_code}\n')
+        path.chmod(0o755)
+
+    def uname(self, system: str) -> None:
+        """A `uname` that names the system: `Linux` in a Cowork VM, `Darwin` on a Mac."""
+        path = self.tools / "uname"
+        path.write_text(f"#!/bin/sh\necho {system}\n")
         path.chmod(0o755)
 
     def enroll(self, text: str) -> None:
@@ -526,6 +533,28 @@ class CoworkVmTests(unittest.TestCase):
 
         self.run_start(entrypoint="cli")
         self.run_hook(entrypoint="cli")
+
+        self.assertEqual([c for c in self.calls() if c.startswith(("uv ", "curl "))], [])
+        self.assertFalse(self.state("cowork-setup.log").exists())
+
+    def test_a_local_task_in_the_vm_is_set_up_as_a_cloud_task_is(self) -> None:
+        """`requireCoworkFullVmSandbox` runs Claude Code in the VM on the Mac (ADR-0015)."""
+        self.enroll(f"STACKTRACE_REMOTE_TOKEN={TOKEN}\n")
+
+        result = self.run_start(entrypoint="local-agent")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(len(self.installs()), 1)
+        self.assertTrue(self.state("cowork-setup.log").exists())
+
+    def test_a_local_task_on_the_mac_uses_the_macs_own_cli(self) -> None:
+        """On the Mac the installer or MDM put the CLI there (ADR-0008, ADR-0015)."""
+        self.enroll(f"STACKTRACE_REMOTE_TOKEN={TOKEN}\n")
+        self.uname("Darwin")
+
+        for entrypoint in ("local-agent", "local_agent"):
+            self.run_start(entrypoint=entrypoint)
+            self.run_hook(entrypoint=entrypoint)
 
         self.assertEqual([c for c in self.calls() if c.startswith(("uv ", "curl "))], [])
         self.assertFalse(self.state("cowork-setup.log").exists())
