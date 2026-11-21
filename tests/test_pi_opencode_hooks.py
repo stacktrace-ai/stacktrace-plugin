@@ -52,6 +52,12 @@ class PiAndOpenCodeHooksTests(unittest.TestCase):
         source = (ROOT / 'opencode/stacktrace.ts').read_text()
         self.assertEqual(source.count('\nexport '), 1)
 
+    def test_the_opencode_plugin_classifies_mcp_resource_reads_from_their_args(self):
+        """`read_mcp_resource` keeps a fixed tool name; its server is in the call's args."""
+        source = (ROOT / 'opencode/stacktrace.ts').read_text()
+        self.assertIn('"read_mcp_resource"', source)
+        self.assertIn('args?.server', source)
+
     def test_validator_rejects_version_drift_and_more_resources_in_the_pi_package(self):
         for change, message in (
             ({'version': '0.0.1'}, 'The Pi package must load only'),

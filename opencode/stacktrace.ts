@@ -65,6 +65,18 @@ function serverOf(tool: string, servers: string[]): string | undefined {
   return fits.length === 1 ? fits[0] : undefined;
 }
 
+// OpenCode's own MCP resource-read tool keeps this fixed name instead of
+// `<server>_<tool>`; the server it reads is in the call's own arguments.
+const MCP_RESOURCE_READ_TOOL = "read_mcp_resource";
+
+function mcpServerOf(tool: string, args: any, servers: string[]): string | undefined {
+  if (tool === MCP_RESOURCE_READ_TOOL) {
+    const server = args?.server;
+    return typeof server === "string" && servers.includes(server) ? server : undefined;
+  }
+  return serverOf(tool, servers);
+}
+
 // The block reason, when the answer is a block. Anything else lets it go on.
 async function blocked(what: string, payload: object): Promise<string | undefined> {
   let out: string;
@@ -129,7 +141,7 @@ export const StacktracePlugin = async ({ client, directory }: any) => {
         input: output.args,
         cwd: directory,
       };
-      const server = serverOf(String(input.tool), await configured());
+      const server = mcpServerOf(String(input.tool), output.args, await configured());
       if (server !== undefined) payload.mcp_server = server;
       const reason = await blocked(String(input.tool), payload);
       if (reason !== undefined) throw new Error(reason);
