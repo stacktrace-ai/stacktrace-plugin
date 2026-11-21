@@ -148,7 +148,7 @@ def main() -> int:
         {
             "name": "stacktrace-alerts",
             "command": 'sh "${CLAUDE_PLUGIN_ROOT}/scripts/subscribe.sh"',
-            "description": "High-severity Stacktrace findings for this Claude session",
+            "description": "Stacktrace findings for this Claude session, including Session cost",
         }
     ]:
         fail("plugin must declare exactly one direct Stacktrace session monitor")
