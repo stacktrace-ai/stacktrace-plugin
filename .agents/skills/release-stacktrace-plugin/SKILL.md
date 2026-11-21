@@ -149,7 +149,7 @@ does not give permission to publish.
 
 Change the version in the four native runtime manifests and add the notes.
 Keep `.claude-plugin/plugin.json` as the canonical release version.
-Mirror it in `.codex-plugin/plugin.json`, `.cursor-plugin/plugin.json` and `devin/.devin-plugin/plugin.json`.
+Mirror it in `.codex-plugin/plugin.json`, `.cursor-plugin/plugin.json`, `devin/.devin-plugin/plugin.json` and the Pi package's `package.json`.
 The validator checks equality.
 Do not change `.claude-plugin/marketplace.json`.
 The pin stays where it is. Development can
@@ -161,7 +161,7 @@ set -e
 git checkout -b release/<version>
 python3 - "<version>" <<'EOF'
 import json, sys
-for path in (".claude-plugin/plugin.json", ".codex-plugin/plugin.json", ".cursor-plugin/plugin.json", "devin/.devin-plugin/plugin.json"):
+for path in (".claude-plugin/plugin.json", ".codex-plugin/plugin.json", ".cursor-plugin/plugin.json", "devin/.devin-plugin/plugin.json", "package.json"):
     manifest = json.load(open(path))
     manifest["version"] = sys.argv[1]
     open(path, "w").write(json.dumps(manifest, indent=2) + "\n")
@@ -170,7 +170,7 @@ git diff --stat                                    # The runtime manifests, or n
 python3 scripts/validate_plugin.py
 python3 -m unittest discover -s tests -v
 claude plugin validate --strict .
-git add .claude-plugin/plugin.json .codex-plugin/plugin.json .cursor-plugin/plugin.json devin/.devin-plugin/plugin.json docs/releases/v<version>.md
+git add .claude-plugin/plugin.json .codex-plugin/plugin.json .cursor-plugin/plugin.json devin/.devin-plugin/plugin.json package.json docs/releases/v<version>.md
 git status --porcelain                             # inspect anything still unstaged
 git commit -m "release: <version> — <theme>"
 git push -u origin release/<version>

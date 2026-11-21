@@ -56,11 +56,14 @@ def main() -> int:
     # sessionStart gets a longer timeout so registration survives daemon recovery (ADR-0009).
     expected_cursor = {
         "sessionStart": [{"command": "sh ./scripts/session_start.sh --agent-kind cursor", "timeout": 15}],
+        # Built-in calls reach the CLI with their input, for a detection block (ADR-0016).
+        # Never `MCP:`: beforeMCPExecution names the server, which preToolUse does not.
+        "preToolUse": [{"command": "sh ./scripts/policy_hook.sh admit --agent-kind cursor", "timeout": 5, "matcher": "^(Shell|Write|Delete|Read)$"}],
         "beforeMCPExecution": [{"command": "sh ./scripts/policy_hook.sh admit --agent-kind cursor", "timeout": 5}],
         "beforeSubmitPrompt": [{"command": "sh ./scripts/policy_hook.sh admit --agent-kind cursor", "timeout": 5}],
     }
     if load_json("hooks/cursor.json") != {"version": 1, "hooks": expected_cursor}:
-        fail("Cursor hooks must delegate registration to the session start script, and MCP and prompt admission to the failure wrapper")
+        fail("Cursor hooks must delegate registration to the session start script, and built-in call, MCP and prompt admission to the failure wrapper")
 
     # Devin installs the `devin` folder (ADR-0012). Its manifest has no hooks
     # field: Devin reads `hooks.json` at the plugin root. The folder carries its
@@ -83,6 +86,21 @@ def main() -> int:
     devin_files = sorted(str(path.relative_to(ROOT / "devin")) for path in (ROOT / "devin").rglob("*") if path.is_file())
     if devin_files != [".devin-plugin/plugin.json", "hooks.json", "scripts/policy_hook.sh", "scripts/session_start.sh"]:
         fail(f"the Devin folder must hold only its manifest, hooks and two scripts, found {devin_files}")
+
+    # Pi installs this repository as a Pi package (`pi install git:…@v<release>`).
+    # Its manifest loads the one extension and nothing else, so the skills and
+    # prompts here never reach Pi.
+    if load_json("package.json") != {"name": "stacktrace", "version": manifest.get("version"), "private": True, "description": "Hook-visible policy admission through the installed Stacktrace CLI.", "keywords": ["pi-package"], "pi": {"extensions": ["./pi/stacktrace.ts"], "skills": [], "prompts": [], "themes": []}}:
+        fail("The Pi package must load only pi/stacktrace.ts and mirror the shared release version")
+    # The Pi extension and the OpenCode plugin keep their unreplaced marker, which
+    # makes each run `scripts/policy_hook.sh` beside it.
+    for host, folder in (("Pi", "pi"), ("OpenCode", "opencode")):
+        files = sorted(str(path.relative_to(ROOT / folder)) for path in (ROOT / folder).rglob("*") if path.is_file())
+        if files != ["stacktrace.ts"]:
+            fail(f"the {folder} folder must hold only stacktrace.ts, found {files}")
+        source = (ROOT / folder / "stacktrace.ts").read_text(encoding="utf-8")
+        if source.count('"__STACKTRACE_HOOKS__"') != 1 or '"../scripts/policy_hook.sh"' not in source:
+            fail(f"the {host} hook must keep its marker and reach scripts/policy_hook.sh beside it")
 
     version = manifest.get("version")
     semver_number = r"(?:0|[1-9][0-9]*)"

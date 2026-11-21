@@ -22,7 +22,14 @@
 # the boot, the step and its milliseconds or code. Never a value or a payload.
 set -u
 
-[ "${CLAUDE_CODE_ENTRYPOINT:-}" = remote_cowork ] || exit 0
+# A cloud task, or a local task whose Claude Code runs in the VM on the
+# person's computer (`requireCoworkFullVmSandbox`). A local task on the Mac
+# itself uses the CLI that the installer or MDM put there (ADR-0015).
+case ${CLAUDE_CODE_ENTRYPOINT:-} in
+  remote_cowork) ;;
+  local-agent|local_agent) [ "$(uname -s 2>/dev/null)" = Linux ] || exit 0 ;;
+  *) exit 0 ;;
+esac
 
 here=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 plugin_root=$(dirname -- "$here")
@@ -39,7 +46,7 @@ log="$state/cowork-setup.log"
 configured="$state/cowork-configured"
 cli="${HOME:-/root}/.local/bin/stacktrace"
 socket=${STACKTRACE_DAEMON_SOCKET:-/tmp/stacktrace-$(id -u 2>/dev/null || echo 0)/daemon-v1.sock}
-COWORK_CLI='stacktrace-cli==0.27.0'
+COWORK_CLI='stacktrace-cli==0.28.0'
 FAILURE_SECONDS=300
 POLICY_SECONDS=${STACKTRACE_COWORK_POLICY_SECONDS:-30}
 STALE_LOCK_SECONDS=${STACKTRACE_COWORK_STALE_LOCK_SECONDS:-180}
