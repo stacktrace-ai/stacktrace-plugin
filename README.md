@@ -502,7 +502,7 @@ Pi 1.5.2 is the conformance reference.
 
 The OpenCode plugin covers built-in tool calls, MCP tool calls, calls in sub-agent sessions and submitted messages.
 It calls the same user daemon as the other agents.
-OpenCode has no command hooks and never calls its `permission.ask` hook, so the plugin is the hook (stacktrace ADR-0269).
+OpenCode has no command hooks and never calls its `permission.ask` hook, so the plugin is the hook (stacktrace ADR-0271).
 It registers the project when OpenCode starts it.
 `tool.execute.before` asks the daemon about each call, and the plugin throws to stop a blocked one.
 OpenCode gives the model the reason as the tool's error.
