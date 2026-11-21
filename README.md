@@ -464,3 +464,58 @@ The CLI needs `--agent-kind devin`.
 Check the project with `stacktrace remote policy hooks status --agent-kind devin`.
 The stacktrace repository holds the adapter and its conformance test.
 No signed-in Devin session has run this plugin.
+
+## Pi policy hooks
+
+The Pi extension covers built-in tool calls, MCP tool calls and submitted messages.
+It calls the same user daemon as the other agents.
+Pi has no command hooks, so the extension is the hook (stacktrace ADR-0250).
+On `session_start` it registers the project.
+On `input` it asks the daemon about the person's message, and a blocked message never reaches the model.
+On `tool_call` it asks about the call, and a blocked call does not run.
+The model gets the reason as the call's result.
+Each call that a `codemode` script makes is judged on its own.
+Fleet's MCP default decides each Pi MCP call, because OpenACA collects no Pi policy evidence yet.
+
+Pi installs this repository as a Pi package at a release tag:
+
+```sh
+pi install git:github.com/stacktrace-ai/stacktrace-plugin@v<release>
+```
+
+`package.json` is the Pi package manifest.
+It loads `pi/stacktrace.ts` and no skills, prompts or themes.
+The extension runs `scripts/policy_hook.sh` beside it, so a missing or failed CLI lets the call run.
+Try a checkout for one session with `pi -e <checkout>`.
+`pi --no-extensions` skips the extension, and Pi has no setting that an administrator can lock.
+The extension needs a `stacktrace-cli` with `--agent-kind pi` and the Pi `register` and prompt support.
+Pi 1.5.2 is the conformance reference.
+
+## OpenCode policy hooks
+
+The OpenCode plugin covers built-in tool calls, MCP tool calls, calls in sub-agent sessions and submitted messages.
+It calls the same user daemon as the other agents.
+OpenCode has no command hooks and never calls its `permission.ask` hook, so the plugin is the hook (stacktrace ADR-0269).
+It registers the project when OpenCode starts it.
+`tool.execute.before` asks the daemon about each call, and the plugin throws to stop a blocked one.
+OpenCode gives the model the reason as the tool's error.
+`chat.message` asks about the person's message.
+The plugin shows the reason on stderr and as a toast, then stops the message before the model.
+Fleet's MCP default decides each OpenCode MCP call, because OpenACA collects no OpenCode policy evidence yet.
+
+Clone a release tag and add the plugin file to OpenCode's configuration:
+
+```sh
+git clone --branch v<release> https://github.com/stacktrace-ai/stacktrace-plugin.git ~/.local/share/stacktrace-plugin
+```
+
+```json
+{"plugin": ["file:///Users/<you>/.local/share/stacktrace-plugin/opencode/stacktrace.ts"]}
+```
+
+Put the entry in `~/.config/opencode/opencode.json` for every project.
+The plugin runs `scripts/policy_hook.sh` beside it, so keep the file in its checkout.
+A missing or failed CLI lets the call run.
+`opencode --pure` and `OPENCODE_PURE=1` skip the plugin.
+The plugin needs a `stacktrace-cli` with `--agent-kind opencode`.
+OpenCode 1.19.6 is the conformance reference.
