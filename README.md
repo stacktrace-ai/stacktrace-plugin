@@ -399,16 +399,17 @@ Without `--git-ref`, Cursor follows `main`.
 
 ### Upgrading
 
-Cursor installs the plugin from whichever marketplace the person or their team chose, and keeps the installed copy at the commit that marketplace last indexed.
-Re-pinning a marketplace with `--git-ref` does not move a copy installed from another marketplace.
-Find the marketplace that holds the installed copy with `agent plugin marketplace list`, then refresh it:
+Cursor keeps the installed copy at the commit its own marketplace last indexed, so the upgrade step depends on how that marketplace was added.
+Find it with `agent plugin marketplace list`: the copy's marketplace is the one whose `gitRef` and name match the installed plugin.
 
-```sh
-agent plugin marketplace update <marketplace>
-```
+- **Pinned to a release tag**, as the command above and the Stacktrace installer add it: run the same `add` command with the new tag.
+  Cursor replaces the tag and keeps the plugin enabled.
+  `agent plugin marketplace update` re-reads the same pinned tag, so it does not upgrade this copy.
+- **Following a branch**, as a team marketplace that tracks this repository's `main` does (named like `stacktrace-ai-stacktrace-plugin`): run `agent plugin marketplace update <marketplace>`.
+  On 2026-11-21 this moved a team-installed copy from 0.3.3 to 0.5.0.
 
-A team marketplace that follows this repository is named like `stacktrace-ai-stacktrace-plugin`.
-Start a new session after the update.
+Re-pinning one marketplace never moves a copy installed from another.
+Start a new session after either step.
 
 ### Prompt checks need a user-level entry
 
