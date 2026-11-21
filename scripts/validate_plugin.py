@@ -84,6 +84,21 @@ def main() -> int:
     if devin_files != [".devin-plugin/plugin.json", "hooks.json", "scripts/policy_hook.sh", "scripts/session_start.sh"]:
         fail(f"the Devin folder must hold only its manifest, hooks and two scripts, found {devin_files}")
 
+    # Pi installs this repository as a Pi package (`pi install git:…@v<release>`).
+    # Its manifest loads the one extension and nothing else, so the skills and
+    # prompts here never reach Pi.
+    if load_json("package.json") != {"name": "stacktrace", "version": manifest.get("version"), "private": True, "description": "Hook-visible policy admission through the installed Stacktrace CLI.", "keywords": ["pi-package"], "pi": {"extensions": ["./pi/stacktrace.ts"], "skills": [], "prompts": [], "themes": []}}:
+        fail("The Pi package must load only pi/stacktrace.ts and mirror the shared release version")
+    # The Pi extension and the OpenCode plugin keep their unreplaced marker, which
+    # makes each run `scripts/policy_hook.sh` beside it.
+    for host, folder in (("Pi", "pi"), ("OpenCode", "opencode")):
+        files = sorted(str(path.relative_to(ROOT / folder)) for path in (ROOT / folder).rglob("*") if path.is_file())
+        if files != ["stacktrace.ts"]:
+            fail(f"the {folder} folder must hold only stacktrace.ts, found {files}")
+        source = (ROOT / folder / "stacktrace.ts").read_text(encoding="utf-8")
+        if source.count('"__STACKTRACE_HOOKS__"') != 1 or '"../scripts/policy_hook.sh"' not in source:
+            fail(f"the {host} hook must keep its marker and reach scripts/policy_hook.sh beside it")
+
     version = manifest.get("version")
     semver_number = r"(?:0|[1-9][0-9]*)"
     if not isinstance(version, str) or not re.fullmatch(
