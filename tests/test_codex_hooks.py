@@ -30,8 +30,8 @@ class CodexHooksTests(unittest.TestCase):
     def test_codex_manifest_selects_only_its_native_hooks(self):
         manifest = json.loads((ROOT / '.codex-plugin/plugin.json').read_text())
         hooks = json.loads((ROOT / manifest['hooks']).read_text())['hooks']
-        self.assertEqual(set(hooks), {'SessionStart', 'PreToolUse', 'UserPromptSubmit'})
-        for event, script in (('SessionStart', 'session_start.sh"'), ('PreToolUse', 'policy_hook.sh" admit'), ('UserPromptSubmit', 'policy_hook.sh" admit')):
+        self.assertEqual(set(hooks), {'SessionStart', 'PreToolUse', 'PostToolUse', 'UserPromptSubmit'})
+        for event, script in (('SessionStart', 'session_start.sh"'), ('PreToolUse', 'policy_hook.sh" admit'), ('PostToolUse', 'policy_hook.sh" admit'), ('UserPromptSubmit', 'policy_hook.sh" admit')):
             handler = hooks[event][0]['hooks'][0]
             self.assertIn(script + ' --agent-kind codex', handler['command'])
             self.assertNotIn('onFailure', handler)
@@ -48,6 +48,19 @@ class CodexHooksTests(unittest.TestCase):
         for tool in ('Bash', 'apply_patch', 'mcp__server__ping', 'mcp__codex_apps__github__fetch_file'):
             self.assertTrue(matcher.search(tool), tool)
         for tool in ('apply_patchx', 'Edit', 'Write', 'exec_command', 'spawn_agent', 'BashOutput', 'xBash'):
+            self.assertFalse(matcher.search(tool), tool)
+
+    def test_codex_sends_the_results_of_mcp_calls_and_its_shell_and_of_no_other_tool(self):
+        """A result that can carry untrusted text goes to the CLI for injection
+        marking, as Claude Code's does. A patch's result is only a status line
+        (stacktrace ADR-0281)."""
+        import re
+        manifest = json.loads((ROOT / '.codex-plugin/plugin.json').read_text())
+        hooks = json.loads((ROOT / manifest['hooks']).read_text())['hooks']
+        matcher = re.compile(hooks['PostToolUse'][0]['matcher'])
+        for tool in ('Bash', 'mcp__server__ping', 'mcp__codex_apps__github__fetch_file'):
+            self.assertTrue(matcher.search(tool), tool)
+        for tool in ('apply_patch', 'Edit', 'Write', 'exec_command', 'spawn_agent', 'BashOutput', 'xBash'):
             self.assertFalse(matcher.search(tool), tool)
 
 

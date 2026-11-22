@@ -328,6 +328,9 @@ Codex names its shell tool `Bash` at the hook, also for a patch sent through the
 A native patch is `apply_patch`.
 A CLI before the one that reads it lets a native patch continue, and its edit is found after the fact.
 Shell commands and prompts need a `stacktrace-cli` newer than 0.21.0. An older CLI lets them continue.
+`PostToolUse` sends each MCP and `Bash` result to the daemon, as on Claude Code.
+Then `stacktrace-injection-followed` can block a call that carries out an instruction from that result (stacktrace ADR-0281).
+Results need a `stacktrace-cli` newer than 0.28.1. An older CLI sends nothing for them.
 It calls the same user daemon as Claude.
 It does not add a notification monitor or a skill admission event.
 Desktop and cloud need separate conformance tests before rollout.
