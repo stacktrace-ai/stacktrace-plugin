@@ -377,7 +377,8 @@ A release promotion must test both native hosts before changing that pin.
 
 ## Cursor policy hooks
 
-The Cursor adapter sends submitted prompts, MCP calls (including MCP servers a plugin bundles), and the built-in `Shell`, `Write`, `Delete` and `Read` tools to the daemon before they run (ADR-0016).
+The Cursor adapter sends submitted prompts and MCP calls to the daemon before they run, including MCP servers a plugin bundles.
+It also sends the built-in `Shell`, `Write`, `Delete` and `Read` tools (ADR-0016).
 It calls the same user daemon as Claude and Codex.
 It adds no notification monitor and no skill, command or sub-agent admission.
 The Cursor CLI fires no admission event for those.
@@ -414,7 +415,8 @@ Start a new session after either step.
 ### Prompt checks need a user-level entry
 
 Cursor CLI 2026.11.19 runs a plugin's `beforeSubmitPrompt` hook only when `~/.cursor/hooks.json` or the project's `.cursor/hooks.json` also has a `beforeSubmitPrompt` entry.
-The Stacktrace CLI adds a do-nothing entry to `~/.cursor/hooks.json` at session start when it has none (stacktrace ADR-0273), and the installer adds it at install time.
+The Stacktrace CLI adds a do-nothing entry to `~/.cursor/hooks.json` at session start when it has none (stacktrace ADR-0273).
+The installer adds it at install time too.
 It keeps every other entry in the file.
 After a plugin-only install, prompt checks start from the second session, since Cursor reads hooks files only when a session starts.
 stacktrace-cli 0.28.1 is the first release that adds it; with an older CLI, prompts are not checked unless the person has their own `beforeSubmitPrompt` entry.
@@ -443,7 +445,9 @@ A `Read` is checked from stacktrace-cli 0.28.1; an older CLI lets it run.
 Check the project with `stacktrace remote policy hooks status --agent-kind cursor`.
 Wait for a valid scope before testing a blocked MCP tool.
 
-Cursor CLI `2026.11.19-f005e9d` is the conformance reference: on 2026-11-21, with plugin 0.5.0 installed from the team marketplace, it blocked a secret read through the shell, a piped install, a planted git alias, a write to `.cursor/hooks.json` and a token sent out, and let `ls` and a normal write run.
+Cursor CLI `2026.11.19-f005e9d` is the conformance reference, with plugin 0.5.0 installed from the team marketplace.
+On 2026-11-21 it blocked a secret read through the shell, a piped install and a planted git alias.
+It also blocked a write to `.cursor/hooks.json` and a token sent out, and let `ls` and a normal write run.
 The stacktrace repository holds the conformance test, and stacktrace-demo holds the end-to-end suite.
 The Cursor manifest mirrors the shared version in `.claude-plugin/plugin.json`.
 The desktop app is not yet tested.
