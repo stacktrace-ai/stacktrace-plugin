@@ -426,6 +426,8 @@ stacktrace-cli 0.28.1 is the first release that adds it; with an older CLI, prom
 Cursor also runs the Cursor manifest in the Claude Code plugin's copy under `~/.claude/plugins/cache`, since this repository ships both manifests.
 On a machine with both plugins, each Cursor hook runs twice, in parallel.
 Both copies ask the same daemon, so a block is recorded once and the second run adds no delay.
+The Cursor app shows each copy's block message, so a person sees the same message twice.
+The CLI shows it once.
 
 ### How it runs
 
