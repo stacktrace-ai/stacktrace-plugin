@@ -30,8 +30,8 @@ class CodexHooksTests(unittest.TestCase):
     def test_codex_manifest_selects_only_its_native_hooks(self):
         manifest = json.loads((ROOT / '.codex-plugin/plugin.json').read_text())
         hooks = json.loads((ROOT / manifest['hooks']).read_text())['hooks']
-        self.assertEqual(set(hooks), {'SessionStart', 'PreToolUse', 'UserPromptSubmit'})
-        for event, script in (('SessionStart', 'session_start.sh"'), ('PreToolUse', 'policy_hook.sh" admit'), ('UserPromptSubmit', 'policy_hook.sh" admit')):
+        self.assertEqual(set(hooks), {'SessionStart', 'PreToolUse', 'PostToolUse', 'UserPromptSubmit'})
+        for event, script in (('SessionStart', 'session_start.sh"'), ('PreToolUse', 'policy_hook.sh" admit'), ('PostToolUse', 'policy_hook.sh" admit'), ('UserPromptSubmit', 'policy_hook.sh" admit')):
             handler = hooks[event][0]['hooks'][0]
             self.assertIn(script + ' --agent-kind codex', handler['command'])
             self.assertNotIn('onFailure', handler)
@@ -48,6 +48,21 @@ class CodexHooksTests(unittest.TestCase):
         for tool in ('Bash', 'apply_patch', 'mcp__server__ping', 'mcp__codex_apps__github__fetch_file'):
             self.assertTrue(matcher.search(tool), tool)
         for tool in ('apply_patchx', 'Edit', 'Write', 'exec_command', 'spawn_agent', 'BashOutput', 'xBash'):
+            self.assertFalse(matcher.search(tool), tool)
+
+    def test_codex_sends_mcp_and_shell_results_and_no_other_tools(self):
+        """Codex 0.171.0 runs `PostToolUse` for an MCP call, with its
+        `CallToolResult`, and for its shell, with the output. Their text marks
+        the session for the injection rule. A patch's result is Codex's own
+        report, so it is not sent (stacktrace ADR-0281)."""
+        import re
+        manifest = json.loads((ROOT / '.codex-plugin/plugin.json').read_text())
+        hooks = json.loads((ROOT / manifest['hooks']).read_text())['hooks']
+        self.assertEqual(hooks['PostToolUse'][0]['hooks'], hooks['PreToolUse'][0]['hooks'])
+        matcher = re.compile(hooks['PostToolUse'][0]['matcher'])
+        for tool in ('Bash', 'mcp__northwind__fetch_record', 'mcp__codex_apps__github__fetch_file'):
+            self.assertTrue(matcher.search(tool), tool)
+        for tool in ('apply_patch', 'update_plan', 'spawn_agent', 'exec_command', 'xBash', 'Bashx'):
             self.assertFalse(matcher.search(tool), tool)
 
 

@@ -328,6 +328,10 @@ Codex names its shell tool `Bash` at the hook, also for a patch sent through the
 A native patch is `apply_patch`.
 A CLI before the one that reads it lets a native patch continue, and its edit is found after the fact.
 Shell commands and prompts need a `stacktrace-cli` newer than 0.21.0. An older CLI lets them continue.
+The `PostToolUse` hook sends the result of an MCP call or a shell command to the daemon.
+The daemon marks the session with it, so a call that carries out an injected instruction can be blocked.
+The hook never blocks and prints nothing.
+A CLI from before stacktrace ADR-0281 ignores the result, and the injection is found after the fact.
 It calls the same user daemon as Claude.
 It does not add a notification monitor or a skill admission event.
 Desktop and cloud need separate conformance tests before rollout.
