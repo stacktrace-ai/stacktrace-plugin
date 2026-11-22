@@ -50,7 +50,7 @@ def main() -> int:
     cursor = load_json(".cursor-plugin/plugin.json")
     # Cursor auto-discovers every skills/*/SKILL.md when the field is absent; an
     # explicit empty list keeps Claude-only skills out of the Cursor surface.
-    if cursor != {"name": "stacktrace", "version": manifest.get("version"), "description": "Hook-visible MCP policy admission through the installed Stacktrace CLI.", "hooks": "./hooks/cursor.json", "skills": []}:
+    if cursor != {"name": "stacktrace", "version": manifest.get("version"), "description": "Stacktrace policy checks for Cursor prompts, shell commands, file writes, deletes, reads and MCP calls, through the installed Stacktrace CLI.", "hooks": "./hooks/cursor.json", "skills": []}:
         fail("Cursor must select its own hooks, disable skill auto-discovery, and mirror the shared release version")
     # Cursor runs plugin hooks from the plugin root, and fails open without failClosed.
     # sessionStart gets a longer timeout so registration survives daemon recovery (ADR-0009).

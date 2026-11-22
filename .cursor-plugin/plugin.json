@@ -1,7 +1,7 @@
 {
   "name": "stacktrace",
   "version": "0.5.0",
-  "description": "Hook-visible MCP policy admission through the installed Stacktrace CLI.",
+  "description": "Stacktrace policy checks for Cursor prompts, shell commands, file writes, deletes, reads and MCP calls, through the installed Stacktrace CLI.",
   "hooks": "./hooks/cursor.json",
   "skills": []
 }
