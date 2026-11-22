@@ -452,7 +452,8 @@ On 2026-11-21 it blocked a secret read through the shell, a piped install and a 
 It also blocked a write to `.cursor/hooks.json` and a token sent out, and let `ls` and a normal write run.
 The stacktrace repository holds the conformance test, and stacktrace-demo holds the end-to-end suite.
 The Cursor manifest mirrors the shared version in `.claude-plugin/plugin.json`.
-The desktop app is not yet tested.
+The Cursor app 3.29.15 was tested on 2026-11-21, in the Agents window and the IDE agent panel.
+It blocked the same calls and a token prompt, and needed no user-level prompt entry.
 
 ## Devin policy hooks
 
