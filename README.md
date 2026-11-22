@@ -378,7 +378,8 @@ A release promotion must test both native hosts before changing that pin.
 
 ## Cursor policy hooks
 
-The Cursor adapter covers MCP tool use, including MCP servers that a plugin bundles, and submitted prompts.
+The Cursor adapter sends submitted prompts and MCP calls to the daemon before they run, including MCP servers a plugin bundles.
+It also sends the built-in `Shell`, `Write`, `Delete` and `Read` tools (ADR-0016).
 It calls the same user daemon as Claude and Codex.
 It adds no notification monitor and no skill, command or sub-agent admission.
 The Cursor CLI fires no admission event for those.
@@ -392,34 +393,68 @@ agent plugin marketplace add github.com/stacktrace-ai/stacktrace-plugin --git-re
 Then run `agent` and type `/plugin`.
 Press Tab to open the Marketplace tab, select `stacktrace` and choose Install.
 Start a new session after you enable it.
-Plugin 0.3.3 is the first release with the Cursor adapter.
+Plugin 0.3.3 is the first release with the Cursor adapter, and 0.5.0 the first that sends built-in tools.
 
 Cursor reads `.cursor-plugin/marketplace.json`, which lists this repository's root (ADR-0011).
 The tag selects the commit.
-Without `--git-ref`, Cursor follows `main`, which holds unreleased code.
-To move to a newer release, run the same command with the new tag.
-Cursor replaces the tag and keeps the plugin enabled.
+Without `--git-ref`, Cursor follows `main`.
+
+### Upgrading
+
+Cursor keeps the installed copy at the commit its own marketplace last indexed, so the upgrade step depends on how that marketplace was added.
+Find it with `agent plugin marketplace list`: the copy's marketplace is the one whose `gitRef` and name match the installed plugin.
+
+- **Pinned to a release tag**, as the command above and the Stacktrace installer add it: run the same `add` command with the new tag.
+  Cursor replaces the tag and keeps the plugin enabled.
+  `agent plugin marketplace update` re-reads the same pinned tag, so it does not upgrade this copy.
+- **Following a branch**, as a team marketplace that tracks this repository's `main` does (named like `stacktrace-ai-stacktrace-plugin`): run `agent plugin marketplace update <marketplace>`.
+  On 2026-11-21 this moved a team-installed copy from 0.3.3 to 0.5.0.
+
+Re-pinning one marketplace never moves a copy installed from another.
+Start a new session after either step.
+
+### Prompt checks need a user-level entry
+
+Cursor CLI 2026.11.19 runs a plugin's `beforeSubmitPrompt` hook only when `~/.cursor/hooks.json` or the project's `.cursor/hooks.json` also has a `beforeSubmitPrompt` entry.
+The Stacktrace CLI adds a do-nothing entry to `~/.cursor/hooks.json` at session start when it has none (stacktrace ADR-0273).
+The installer adds it at install time too.
+It keeps every other entry in the file.
+After a plugin-only install, prompt checks start from the second session, since Cursor reads hooks files only when a session starts.
+stacktrace-cli 0.28.1 is the first release that adds it; with an older CLI, prompts are not checked unless the person has their own `beforeSubmitPrompt` entry.
+
+### Two copies
+
+Cursor also runs the Cursor manifest in the Claude Code plugin's copy under `~/.claude/plugins/cache`, since this repository ships both manifests.
+On a machine with both plugins, each Cursor hook runs twice, in parallel.
+Both copies ask the same daemon, so a block is recorded once and the second run adds no delay.
+The Cursor app shows each copy's block message, so a person sees the same message twice.
+The CLI shows it once.
+
+### How it runs
 
 Test a checkout with `agent --plugin-dir <checkout>`.
 Cursor reads `~/.cursor/plugins/local` only when a team admin allows user plugin imports.
 
 Cursor reads `.cursor-plugin/plugin.json` and `hooks/cursor.json`.
 The `sessionStart` hook runs `scripts/session_start.sh`, which registers the project.
-The `beforeMCPExecution` and `beforeSubmitPrompt` hooks run `scripts/policy_hook.sh` and ask the daemon for a decision.
-A blocked prompt gets `continue: false`, and Cursor shows the reason to the person.
+The `preToolUse`, `beforeMCPExecution` and `beforeSubmitPrompt` hooks run `scripts/policy_hook.sh` and ask the daemon for a decision.
+A blocked prompt gets `continue: false`, and a blocked call gets `permission: deny`; Cursor shows the reason to the person.
 The hooks run from the plugin root.
 The wrapper prints nothing when the CLI fails, so Cursor's own approval decides.
 The hooks do not set `failClosed`.
 
 The CLI needs `--agent-kind cursor` and an OpenACA release that collects Cursor evidence.
+A `Read` is checked from stacktrace-cli 0.28.1; an older CLI lets it run.
 Check the project with `stacktrace remote policy hooks status --agent-kind cursor`.
 Wait for a valid scope before testing a blocked MCP tool.
 
-The Cursor CLI `2026.10.22-27dcf5f` is the conformance reference.
-Its local-inference build runs the native tests with no account.
+Cursor CLI `2026.11.19-f005e9d` is the conformance reference, with plugin 0.5.0 installed from the team marketplace.
+On 2026-11-21 it blocked a secret read through the shell, a piped install and a planted git alias.
+It also blocked a write to `.cursor/hooks.json` and a token sent out, and let `ls` and a normal write run.
 The stacktrace repository holds the conformance test, and stacktrace-demo holds the end-to-end suite.
 The Cursor manifest mirrors the shared version in `.claude-plugin/plugin.json`.
-The desktop app and Cursor's public marketplace are not yet tested.
+The Cursor app 3.29.15 was tested on 2026-11-21, in the Agents window and the IDE agent panel.
+It blocked the same calls and a token prompt, and needed no user-level prompt entry.
 
 ## Devin policy hooks
 
