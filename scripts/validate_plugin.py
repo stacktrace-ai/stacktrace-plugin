@@ -43,6 +43,8 @@ def main() -> int:
     expected_codex = {
         "SessionStart": [{"hooks": [{"type": "command", "command": 'sh "${PLUGIN_ROOT}/scripts/session_start.sh" --agent-kind codex', "timeout": 15}]}],
         "PreToolUse": [{"hooks": [{"type": "command", "command": 'sh "${PLUGIN_ROOT}/scripts/policy_hook.sh" admit --agent-kind codex', "timeout": 5}], "matcher": "^(mcp__.*|Bash|apply_patch)$"}],
+        # Sends an MCP or shell result for injection marking, and never decides (stacktrace ADR-0281).
+        "PostToolUse": [{"hooks": [{"type": "command", "command": 'sh "${PLUGIN_ROOT}/scripts/policy_hook.sh" admit --agent-kind codex', "timeout": 5}], "matcher": "^(mcp__.*|Bash)$"}],
         "UserPromptSubmit": [{"hooks": [{"type": "command", "command": 'sh "${PLUGIN_ROOT}/scripts/policy_hook.sh" admit --agent-kind codex', "timeout": 5}]}],
     }
     if codex_hooks != {"hooks": expected_codex}:

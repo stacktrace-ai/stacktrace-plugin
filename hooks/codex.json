@@ -23,6 +23,18 @@
         ]
       }
     ],
+    "PostToolUse": [
+      {
+        "matcher": "^(mcp__.*|Bash)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"${PLUGIN_ROOT}/scripts/policy_hook.sh\" admit --agent-kind codex",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
     "UserPromptSubmit": [
       {
         "hooks": [
