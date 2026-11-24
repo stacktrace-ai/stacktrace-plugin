@@ -13,7 +13,7 @@
   ],
   "PreToolUse": [
     {
-      "matcher": "^(mcp__.+|mcp_call_tool)$",
+      "matcher": "^(mcp__.+|mcp_call_tool|exec|read|write|edit|apply_patch|notebook_read|notebook_edit|grep|glob|find_file_by_name|code_search|webfetch|web_search)$",
       "hooks": [
         {
           "type": "command",

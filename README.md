@@ -460,12 +460,14 @@ It blocked the same calls and a token prompt, and needed no user-level prompt en
 
 ## Devin policy hooks
 
-The Devin adapter covers MCP tool use and submitted prompts.
+The Devin adapter covers MCP tool use, submitted prompts, and the built-in calls that a blocking rule reads.
+These are `exec`, file reads, writes and edits, searches and web calls (stacktrace ADR-0285).
+An older CLI returns no decision for a built-in call, so the call continues.
 It calls the same user daemon as Claude, Codex and Cursor.
 A blocked prompt gets Devin's top-level `decision: block`.
 No signed-in Devin session has confirmed that Devin stops a prompt on it.
 An older CLI returns no decision for a Devin prompt, so the prompt continues.
-It adds no notification monitor and no skill, sub-agent or built-in tool admission.
+It adds no notification monitor and no skill or sub-agent admission.
 Fleet's MCP default decides each Devin MCP call, because OpenACA collects no Devin policy evidence yet.
 The hooks run only in local Devin sessions: the CLI and Devin Desktop.
 Devin registers plugin hooks only there, so cloud Devin sessions get no Fleet decision.
