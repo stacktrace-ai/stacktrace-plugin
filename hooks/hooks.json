@@ -1,5 +1,5 @@
 {
-  "description": "Teach notification delivery, request synchronous hook-visible policy admission for tools and prompts, and send tool results for injection marking.",
+  "description": "Teach notification delivery, request synchronous hook-visible policy admission for tools, prompts and finished turns, and send tool results for injection marking.",
   "hooks": {
     "SessionStart": [
       {
@@ -19,7 +19,7 @@
           {
             "type": "command",
             "command": "sh \"${CLAUDE_PLUGIN_ROOT}/scripts/policy_hook.sh\" admit 2>/dev/null || true",
-            "timeout": 5,
+            "timeout": 40,
             "onFailure": "continue"
           }
         ],
@@ -70,7 +70,19 @@
           {
             "type": "command",
             "command": "sh \"${CLAUDE_PLUGIN_ROOT}/scripts/policy_hook.sh\" admit 2>/dev/null || true",
-            "timeout": 5,
+            "timeout": 40,
+            "onFailure": "continue"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/scripts/policy_hook.sh\" admit 2>/dev/null || true",
+            "timeout": 40,
             "onFailure": "continue"
           }
         ]

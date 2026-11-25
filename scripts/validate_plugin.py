@@ -42,10 +42,14 @@ def main() -> int:
     # Every host's SessionStart runs the one session start script for 15 seconds (ADR-0013).
     expected_codex = {
         "SessionStart": [{"hooks": [{"type": "command", "command": 'sh "${PLUGIN_ROOT}/scripts/session_start.sh" --agent-kind codex', "timeout": 15}]}],
-        "PreToolUse": [{"hooks": [{"type": "command", "command": 'sh "${PLUGIN_ROOT}/scripts/policy_hook.sh" admit --agent-kind codex', "timeout": 5}], "matcher": "^(mcp__.*|Bash|apply_patch)$"}],
+        # A decision can wait on the policy engine's model round (stacktrace
+        # ENGINE_TIMEOUT, 25 s); a shorter hook timeout lets the call through.
+        "PreToolUse": [{"hooks": [{"type": "command", "command": 'sh "${PLUGIN_ROOT}/scripts/policy_hook.sh" admit --agent-kind codex', "timeout": 40}], "matcher": "^(mcp__.*|Bash|apply_patch)$"}],
         # Sends an MCP or shell result for injection marking, and never decides (stacktrace ADR-0281).
         "PostToolUse": [{"hooks": [{"type": "command", "command": 'sh "${PLUGIN_ROOT}/scripts/policy_hook.sh" admit --agent-kind codex', "timeout": 5}], "matcher": "^(mcp__.*|Bash)$"}],
-        "UserPromptSubmit": [{"hooks": [{"type": "command", "command": 'sh "${PLUGIN_ROOT}/scripts/policy_hook.sh" admit --agent-kind codex', "timeout": 5}]}],
+        "UserPromptSubmit": [{"hooks": [{"type": "command", "command": 'sh "${PLUGIN_ROOT}/scripts/policy_hook.sh" admit --agent-kind codex', "timeout": 40}]}],
+        # A finished turn, for custom rules on the agent's reply (stacktrace ADR-0232).
+        "Stop": [{"hooks": [{"type": "command", "command": 'sh "${PLUGIN_ROOT}/scripts/policy_hook.sh" admit --agent-kind codex', "timeout": 40}]}],
     }
     if codex_hooks != {"hooks": expected_codex}:
         fail("Codex hooks must delegate registration to the session start script and MCP admission to the failure wrapper")
@@ -174,8 +178,8 @@ def main() -> int:
         fail("plugin must declare exactly one direct Stacktrace session monitor")
 
     configured = hooks.get("hooks") if isinstance(hooks, dict) else None
-    if not isinstance(configured, dict) or set(configured) != {"SessionStart", "PreToolUse", "PostToolUse", "PostToolUseFailure", "UserPromptExpansion", "UserPromptSubmit"}:
-        fail("hooks must contain SessionStart guidance, the three synchronous admission events and PostToolUse marking")
+    if not isinstance(configured, dict) or set(configured) != {"SessionStart", "PreToolUse", "PostToolUse", "PostToolUseFailure", "UserPromptExpansion", "UserPromptSubmit", "Stop"}:
+        fail("hooks must contain SessionStart guidance, the four synchronous admission events and PostToolUse marking")
     expected_start = {"hooks": [{
         "type": "command",
         "command": 'sh "${CLAUDE_PLUGIN_ROOT}/scripts/session_start.sh" --agent-kind claude-code 2>/dev/null || true',
@@ -185,12 +189,15 @@ def main() -> int:
     if configured["SessionStart"] != [expected_start]:
         fail("SessionStart must teach notifications and delegate registration to the CLI")
 
-    for event in ("PreToolUse", "PostToolUse", "PostToolUseFailure", "UserPromptExpansion", "UserPromptSubmit"):
+    for event in ("PreToolUse", "PostToolUse", "PostToolUseFailure", "UserPromptExpansion", "UserPromptSubmit", "Stop"):
         expected_group = {
             "hooks": [{
                 "type": "command",
                 "command": 'sh "${CLAUDE_PLUGIN_ROOT}/scripts/policy_hook.sh" admit 2>/dev/null || true',
-                "timeout": 5,
+                # A tool call, a prompt or a finished turn can wait on the
+                # policy engine's model round (stacktrace ENGINE_TIMEOUT, 25 s);
+                # a shorter hook timeout lets it through unjudged.
+                "timeout": 40 if event in ("PreToolUse", "UserPromptSubmit", "Stop") else 5,
                 "onFailure": "continue",
             }],
         }

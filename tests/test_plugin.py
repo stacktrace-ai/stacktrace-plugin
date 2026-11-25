@@ -338,15 +338,21 @@ class PluginContractTests(unittest.TestCase):
         self.assertIn("STACKTRACE_NOTIFY_V1", document["hookSpecificOutput"]["additionalContext"])
         self.assertNotIn("systemMessage", document)
 
-    def test_plugin_has_no_turn_or_session_end_detection_hook(self) -> None:
+    def test_plugin_has_no_session_end_detection_hook(self) -> None:
         document = json.loads((ROOT / "hooks" / "hooks.json").read_text(encoding="utf-8"))
         # PostToolUse only sends a tool result for injection marking; it
-        # decides nothing and detects nothing at the end of a turn
-        # (stacktrace ADR-0223).
+        # decides nothing (stacktrace ADR-0223). Stop asks for a policy
+        # decision on the finished turn and detects nothing.
         self.assertEqual(
             set(document["hooks"]),
-            {"SessionStart", "PreToolUse", "PostToolUse", "PostToolUseFailure", "UserPromptExpansion", "UserPromptSubmit"},
+            {"SessionStart", "PreToolUse", "PostToolUse", "PostToolUseFailure", "UserPromptExpansion", "UserPromptSubmit", "Stop"},
         )
+
+    def test_a_finished_turn_reaches_admission(self) -> None:
+        # Custom rules can judge the agent's reply when its turn ends
+        # (stacktrace ADR-0232). Without a Stop hook they never run.
+        document = json.loads((ROOT / "hooks" / "hooks.json").read_text(encoding="utf-8"))
+        self.assertEqual(document["hooks"]["Stop"], document["hooks"]["UserPromptSubmit"])
 
     def test_admission_reaches_every_tool_a_stacktrace_rule_can_block(self) -> None:
         # The built-in tools whose class a blockable Stacktrace rule reads:
@@ -756,12 +762,23 @@ if __name__ == "__main__":
 class PolicyHookContractTests(unittest.TestCase):
     def test_admission_is_synchronous_and_host_continues_on_launch_failures(self):
         document = json.loads((ROOT / "hooks" / "hooks.json").read_text())
-        for event in ("PreToolUse", "UserPromptExpansion"):
+        for event in ("PreToolUse", "UserPromptExpansion", "UserPromptSubmit", "Stop"):
             handler = document["hooks"][event][0]["hooks"][0]
             self.assertNotIn("async", handler)
             self.assertEqual(handler["onFailure"], "continue")
-            self.assertLessEqual(handler["timeout"], 5)
+            self.assertLessEqual(handler["timeout"], 40)
             self.assertEqual(handler["command"], 'sh "${CLAUDE_PLUGIN_ROOT}/scripts/policy_hook.sh" admit 2>/dev/null || true')
+
+    def test_a_policy_engine_decision_finishes_before_the_hook_times_out(self):
+        # The CLI waits up to ENGINE_TIMEOUT (25 s) when the daemon runs the
+        # policy engine, whose model round has a 20 s deadline (stacktrace
+        # agentspec-policy.md). A hook that stops first lets the call through.
+        document = json.loads((ROOT / "hooks" / "hooks.json").read_text())
+        for event in ("PreToolUse", "UserPromptSubmit", "Stop"):
+            self.assertGreater(document["hooks"][event][0]["hooks"][0]["timeout"], 25, event)
+        codex = json.loads((ROOT / "hooks" / "codex.json").read_text())
+        for event in ("PreToolUse", "UserPromptSubmit", "Stop"):
+            self.assertGreater(codex["hooks"][event][0]["hooks"][0]["timeout"], 25, event)
 
     def test_session_start_has_one_guarded_entrypoint(self):
         document = json.loads((ROOT / "hooks/hooks.json").read_text())
