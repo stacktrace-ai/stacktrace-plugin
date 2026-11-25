@@ -30,8 +30,8 @@ class CodexHooksTests(unittest.TestCase):
     def test_codex_manifest_selects_only_its_native_hooks(self):
         manifest = json.loads((ROOT / '.codex-plugin/plugin.json').read_text())
         hooks = json.loads((ROOT / manifest['hooks']).read_text())['hooks']
-        self.assertEqual(set(hooks), {'SessionStart', 'PreToolUse', 'PostToolUse', 'UserPromptSubmit'})
-        for event, script in (('SessionStart', 'session_start.sh"'), ('PreToolUse', 'policy_hook.sh" admit'), ('PostToolUse', 'policy_hook.sh" admit'), ('UserPromptSubmit', 'policy_hook.sh" admit')):
+        self.assertEqual(set(hooks), {'SessionStart', 'PreToolUse', 'PostToolUse', 'UserPromptSubmit', 'Stop'})
+        for event, script in (('SessionStart', 'session_start.sh"'), ('PreToolUse', 'policy_hook.sh" admit'), ('PostToolUse', 'policy_hook.sh" admit'), ('UserPromptSubmit', 'policy_hook.sh" admit'), ('Stop', 'policy_hook.sh" admit')):
             handler = hooks[event][0]['hooks'][0]
             self.assertIn(script + ' --agent-kind codex', handler['command'])
             self.assertNotIn('onFailure', handler)
