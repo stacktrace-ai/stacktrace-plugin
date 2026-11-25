@@ -1,6 +1,6 @@
 {
   "name": "stacktrace",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "displayName": "Stacktrace",
   "description": "Automatic runtime detection and native notifications for Claude Code sessions.",
   "author": {
