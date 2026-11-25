@@ -1,6 +1,6 @@
 {
   "name": "stacktrace",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "private": true,
   "description": "Hook-visible policy admission through the installed Stacktrace CLI.",
   "keywords": [

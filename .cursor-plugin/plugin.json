@@ -1,6 +1,6 @@
 {
   "name": "stacktrace",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "Stacktrace policy checks for Cursor prompts, shell commands, file writes, deletes, reads and MCP calls, through the installed Stacktrace CLI.",
   "hooks": "./hooks/cursor.json",
   "skills": []
