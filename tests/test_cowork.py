@@ -23,7 +23,7 @@ from test_plugin import Stubs, isolated
 ROOT = Path(__file__).resolve().parents[1]
 #: A token in the shape of a real one, made up for these tests.
 TOKEN = "stk_test_4f0c7a8e1b2c4d3e8f90"
-PIN = "stacktrace-cli==0.28.0"
+PIN = "stacktrace-cli==0.29.0"
 INSTALL = "uv tool install --quiet --compile-bytecode"
 DECIDING = ("PreToolUse", "UserPromptExpansion", "UserPromptSubmit")
 #: The Cowork zip's own files. Each hook in it calls one of the two wrappers.
@@ -32,7 +32,7 @@ COWORK_FILES = ("hooks.json", "setup.sh", "session_start.sh", "policy_hook.sh")
 CLI = """#!/bin/sh
 echo "cli $* token=${STACKTRACE_REMOTE_TOKEN:-none} api=${STACKTRACE_REMOTE_API_URL:-none}" >>"$STUB_LOG"
 case "$1" in
-  --version) echo "stacktrace 0.28.0 (openaca 0.15.0)" ;;
+  --version) echo "stacktrace 0.29.0 (openaca 0.15.1)" ;;
   telemetry) echo off ;;
   remote)
     case "$*" in
