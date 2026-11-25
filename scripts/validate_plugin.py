@@ -74,7 +74,7 @@ def main() -> int:
         fail("Devin must name the plugin and mirror the shared release version")
     expected_devin = {
         "SessionStart": [{"matcher": "", "hooks": [{"type": "command", "command": 'sh "${PLUGIN_ROOT}/scripts/session_start.sh" --agent-kind devin', "timeout": 15}]}],
-        "PreToolUse": [{"matcher": "^(mcp__.+|mcp_call_tool|exec|read|write|edit|apply_patch|notebook_read|notebook_edit|grep|glob|find_file_by_name|code_search|webfetch|web_search)$", "hooks": [{"type": "command", "command": 'sh "${PLUGIN_ROOT}/scripts/policy_hook.sh" admit --agent-kind devin', "timeout": 5}]}],
+        "PreToolUse": [{"matcher": "^(mcp__.+|mcp_call_tool|exec|write_to_process|read|write|edit|apply_patch|notebook_read|notebook_edit|grep|glob|find_file_by_name|code_search|webfetch|web_search)$", "hooks": [{"type": "command", "command": 'sh "${PLUGIN_ROOT}/scripts/policy_hook.sh" admit --agent-kind devin', "timeout": 5}]}],
         "UserPromptSubmit": [{"matcher": "", "hooks": [{"type": "command", "command": 'sh "${PLUGIN_ROOT}/scripts/policy_hook.sh" admit --agent-kind devin', "timeout": 5}]}],
     }
     if load_json("devin/hooks.json") != expected_devin:

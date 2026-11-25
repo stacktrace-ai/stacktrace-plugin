@@ -68,8 +68,8 @@ class DevinHooksTests(unittest.TestCase):
         # Devin matches a matcher as a regex search on tool_name.
         matcher = hooks['PreToolUse'][0]['matcher']
         # Each built-in tool whose OpenAIDR class a blocking rule reads (stacktrace ADR-0285).
-        builtin = {'exec', 'read', 'write', 'edit', 'apply_patch', 'notebook_read', 'notebook_edit', 'grep', 'glob',
-                   'find_file_by_name', 'code_search', 'webfetch', 'web_search'}
+        builtin = {'exec', 'write_to_process', 'read', 'write', 'edit', 'apply_patch', 'notebook_read', 'notebook_edit',
+                   'grep', 'glob', 'find_file_by_name', 'code_search', 'webfetch', 'web_search'}
         selected = {'mcp__github__create_issue', 'mcp__fixture__ping', 'mcp_call_tool'} | builtin
         others = {'skill', 'run_subagent', 'mcp_list_tools', 'mcp_read_resource', 'xmcp_call_tool', 'get_output',
                   'kill_shell', 'todo_write', 'ask_user_question', 'execute', 'xexec', 'readme'}
