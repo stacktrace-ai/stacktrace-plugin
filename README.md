@@ -460,12 +460,14 @@ It blocked the same calls and a token prompt, and needed no user-level prompt en
 
 ## Devin policy hooks
 
-The Devin adapter covers MCP tool use and submitted prompts.
+The Devin adapter covers MCP tool use, submitted prompts, and the built-in calls that a blocking rule reads.
+These are `exec`, writes to a running process, file reads, writes and edits, searches and web calls (stacktrace ADR-0285).
+An older CLI returns no decision for a built-in call, so the call continues.
 It calls the same user daemon as Claude, Codex and Cursor.
 A blocked prompt gets Devin's top-level `decision: block`.
 No signed-in Devin session has confirmed that Devin stops a prompt on it.
 An older CLI returns no decision for a Devin prompt, so the prompt continues.
-It adds no notification monitor and no skill, sub-agent or built-in tool admission.
+It adds no notification monitor and no skill or sub-agent admission.
 Fleet's MCP default decides each Devin MCP call, because OpenACA collects no Devin policy evidence yet.
 The hooks run only in local Devin sessions: the CLI and Devin Desktop.
 Devin registers plugin hooks only there, so cloud Devin sessions get no Fleet decision.
@@ -496,7 +498,7 @@ Start a new session after the install.
 Type `/hooks` to see the three Stacktrace hooks.
 
 The `SessionStart` hook runs `session_start.sh`, which registers the project.
-The `PreToolUse` hook runs `policy_hook.sh`, which asks the daemon for a decision on `mcp__<server>__<tool>` and `mcp_call_tool`.
+The `PreToolUse` hook runs `policy_hook.sh`, which asks the daemon for a decision on `mcp__<server>__<tool>`, `mcp_call_tool`, and the built-in calls listed above.
 The `UserPromptSubmit` hook runs `policy_hook.sh`, which asks the daemon for a decision on a submitted prompt.
 A blocked prompt gets Devin's top-level `decision: block`.
 All hooks run their scripts through `${PLUGIN_ROOT}`.
